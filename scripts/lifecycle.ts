@@ -16,7 +16,14 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
 import { COLLATERAL } from "../src/lib/account";
 import { NETWORK } from "../src/lib/config";
-import { acceptDuel, createDuel, getDuel, listOpenDuels, stakesFor } from "../src/lib/duels";
+import {
+  acceptDuel,
+  createDuel,
+  getDuel,
+  listOpenDuels,
+  restBand,
+  stakesFor,
+} from "../src/lib/duels";
 import { readExchange, signerExchangeFor } from "../src/lib/exchange";
 import { listLiveMarkets, loadMarket, STATUS } from "../src/lib/markets";
 
@@ -26,7 +33,10 @@ try {
   /* fall back to whatever is already in the environment */
 }
 
-const GAS_PER_PLAYER = parseEther("0.05");
+// Comfortably above the largest per-write reserve (order: 4M gas x 12 gwei =
+// 0.048 STT). The node checks `balance >= gasLimit * maxFeePerGas` before it
+// will even accept a transaction, so headroom matters more than actual cost.
+const GAS_PER_PLAYER = parseEther("0.12");
 const FAUCET_AMOUNT = 1_000n * 10n ** 6n; // 1,000 tUSDC (6dp on Shannon)
 
 const transport = http(NETWORK.httpRpcUrl);
@@ -84,10 +94,34 @@ async function main() {
     console.log(`  ${name}: ${money(bal, 6)} tUSDC`);
   }
 
-  // Pick a window with real runway so the test never races the clock.
+  // Pick a window with real runway AND the thinnest book.
+  //
+  // An order book matches by price-then-time, and there is no way to target one
+  // resting order: if a better-priced order is sitting there when the taker
+  // accepts, the pool fills them against THAT instead. That is the situation
+  // Faceoff exists for — an empty book — so the proof runs on the emptiest one,
+  // and the checks below assert we really did match the duel rather than a
+  // passing market maker.
   const markets = await listLiveMarkets();
-  const target = markets.find((m) => m.intervalSec >= 900) ?? markets[0];
-  if (!target) throw new Error("No live markets on the venue.");
+  const candidates = markets.filter((m) => m.expiry - Date.now() / 1000 > 600);
+  if (candidates.length === 0) throw new Error("No live markets with runway on the venue.");
+
+  const depths = await Promise.all(
+    candidates.map(async (m) => {
+      try {
+        const book = await readExchange().client.getBinaryOrderBook(m.pool, { depth: 5 });
+        return { m, depth: book.yesBids.length + book.yesAsks.length };
+      } catch {
+        return { m, depth: Number.MAX_SAFE_INTEGER };
+      }
+    }),
+  );
+  depths.sort((a, b) => a.depth - b.depth);
+  const target = depths[0].m;
+  log(
+    "Book depth per window",
+    depths.map((d) => `${d.m.asset} ${d.m.intervalSec / 60}m: ${d.depth}`).join("  |  "),
+  );
 
   const market = await loadMarket(target.marketId);
   log("Chosen window", {
@@ -104,13 +138,24 @@ async function main() {
   const beforeA = await client.getErc20Balance(COLLATERAL, alice.address);
   const beforeB = await client.getErc20Balance(COLLATERAL, bob.address);
 
-  log("Alice opens a duel — backs UP, 60% confident, pot of 10");
+  // A duel is post-only, so it has to rest outside the current touch. Read the
+  // band and pick the most confident price that still rests.
+  const band = await restBand(market);
+  const one = 10 ** market.grid.decimals;
+  log("Resting band (post-only cannot cross)", {
+    bestYesBid: band.bestYesBid === null ? null : Number(band.bestYesBid) / one,
+    bestYesAsk: band.bestYesAsk === null ? null : Number(band.bestYesAsk) / one,
+    maxUpPriceForAnUpDuel: Number(band.maxUpForUp) / one,
+  });
+
+  const upProbability = Math.min(0.6, Number(band.maxUpForUp) / one);
+  log(`Alice opens a duel — backs UP at ${upProbability}, pot of 10`);
   const created = await createDuel({
     privateKey: ALICE_KEY,
     marketId: market.marketId,
     side: "UP",
     pot: 10,
-    upProbability: 0.6,
+    upProbability,
   });
   console.log({
     orderId: created.orderId.toString(),
@@ -144,8 +189,13 @@ async function main() {
     side: accepted.side,
     filled: money(accepted.filledQuantity, market.grid.decimals),
     avgFillPrice: money(accepted.avgPrice, market.grid.decimals),
+    matchedFromAlicesDuel: money(accepted.matchedFromDuel, market.grid.decimals),
+    opponent: accepted.opponent,
     tx: `${NETWORK.explorer}/tx/${accepted.hash}`,
   });
+  if (accepted.matchedElsewhere) {
+    log("⚠ matched against the open book rather than the duel — a better price was resting");
+  }
 
   log("The resting duel is consumed");
   const after = await getDuel(market.marketId, market.pool, created.orderId);
@@ -176,11 +226,12 @@ async function main() {
   });
 
   const checks = {
+    "bob matched ALICE, not the book": accepted.matchedFromDuel > 0n,
     "alice holds UP": aUp > 0n,
     "bob holds DOWN": bDown > 0n,
     "alice holds no DOWN": aDown === 0n,
     "bob holds no UP": bUp === 0n,
-    "order consumed": after === null,
+    "duel fully consumed": after === null,
     "alice paid her stake": beforeA - afterA > 0n,
     "bob paid his stake": beforeB - afterB > 0n,
     "stakes sum to the pot": Number(beforeA - afterA + (beforeB - afterB)) / 10 ** d === stakes.pot,

@@ -178,7 +178,39 @@ Players need nothing. A burner wallet is generated in the browser, gas is drippe
 npm run lifecycle
 ```
 
-Funds two fresh wallets, opens a duel from one, discovers it on-chain by its tag alone, takes it from the other, and asserts against chain state that the pool minted a pair — Alice holds only Up, Bob holds only Down, and their two stakes sum exactly to the pot.
+Funds two fresh wallets, opens a duel from one, discovers it on-chain by its tag alone, takes it from the other, and asserts against chain state that the pool minted a pair.
+
+**Verified on Shannon.** A real run:
+
+```
+▸ Alice opens a duel — backs UP at 0.348, pot of 10
+  aliceStake: 3.48   order 36893488147419305257
+
+▸ Discoverable on-chain from the Faceoff tag alone — no database anywhere
+  creatorSide: UP · pot: 10 · takerStake: 6.52 · impliedUpProbability: 0.348
+
+▸ Bob takes the other side
+  filled 10.0000 @ 0.3480 · matchedFromAlicesDuel: 10.0000
+
+▸ Positions — did the pool mint a pair out of nothing?
+  alice  UP 10.0000   DOWN  0.0000
+  bob    UP  0.0000   DOWN 10.0000
+
+  ✓ bob matched ALICE, not the book      ✓ duel fully consumed
+  ✓ alice paid 3.48   ✓ bob paid 6.52    ✓ stakes sum to the pot
+
+✓ PASS — two buyers, no seller, no market maker. The pool minted the pair.
+```
+
+[Open tx](https://shannon-explorer.somnia.network/tx/0x5f6361d4559cd625e3e5301856a49077d3f17e4a7e7190578e540319c47cccdc) · [Match tx](https://shannon-explorer.somnia.network/tx/0xe24f232d760973e8d8e9bc6207ebdc4baf84ce665145fc5acd2e407e1761e091)
+
+### One thing an order book cannot do
+
+A CLOB matches by price, then time. **There is no way to target a specific resting order** — so if a better-priced order is sitting there when someone opens your link, the pool fills them against *that* instead. They get a better price and your challenge stays open.
+
+On an empty book — the case Faceoff exists for — this cannot happen. On a liquid one it can, and an earlier run caught exactly that: the taker filled at 0.457 against a passing market maker instead of 0.363 against the duel.
+
+So `acceptDuel` compares each fill's `makerOrderId` against the duel's own id and reports the truth. If you were matched elsewhere, the app says so rather than claiming you beat your friend. And because a post-only duel that would cross is *rejected* by the pool, the create screen reads the resting band and caps the confidence slider before you can pick odds that bounce.
 
 ## Architecture
 
@@ -220,7 +252,13 @@ Collected while building, offered in the spirit of the optional feedback report.
 3. **The `BUY_NO` price convention is the single most load-bearing detail and the easiest to get wrong.** `price` is *always* the Up price, for both sides — a Buy Down at Up-price `p` escrows `quantity × (1 − p)`. The Recipes note ("a NO price is `ONE - ticks(p)`") reads as though you should invert it yourself, which produces orders that never cross. The escrow switch in `writer.ts` is the clearest statement of the rule and deserves to be in the docs.
 4. **`userData` is an underrated feature.** It is documented as MM bookkeeping, but it is really a permissionless application-level index on a shared order book. Faceoff's entire "no database" property comes from it. Worth a recipe.
 5. **The two-venue situation costs everyone an hour.** Shannon serves a production venue and a `Pricefeed test` venue side by side, and `listLiveBinaryMarkets()` returns both. Gotcha #8 warns about it, but neither the starter template nor the quick start scopes by venue, so the obvious first build quotes test windows by accident. A named export for the current venue id would remove the whole class of mistake.
-6. **What's excellent:** the Gotchas page is the most useful document in the whole set — it is written from real failures and every item earned its place. Shipping `src/` inside the npm package made the ambiguities above answerable in seconds rather than guesswork.
+6. **The default fee ceiling makes a faucet-funded wallet unusable, and the error doesn't say so.** The SDK never estimates fees: it signs with a fixed `maxFeePerGas` (60 gwei) and a fixed gas ceiling (10,000,000), and the node checks `balance >= gasLimit * maxFeePerGas` before accepting a transaction. That demands **0.6 STT of headroom per write** — more than any Shannon faucet dispenses in a day — even though the transaction costs a fraction of a cent and the margin is refunded.
+
+   The result: a new builder funds a wallet, calls `trader.faucet()`, and gets `insufficient balance` on a wallet that visibly holds funds, for a call that mints tokens and costs nothing. Shannon's base fee is 6 gwei, so 60 is a 10× ceiling. Lowering `fees.maxFeePerGas` to 12 gwei and passing a realistic per-call `gas` fixed it here. Worth a line in Gotchas, a lower default, or a clearer error — this is the single most likely thing to stop someone on day one.
+
+7. **`getOpeningPrices` returns a map keyed by marketId, and its values are 1e2-scaled** while the price feed reports human units. Neither the shape nor the scale is stated, so comparing a market's opening price against a live price silently compares numbers a hundred times apart. `getMarketResolution().openingAnswer.numericValue` carries the same scale.
+
+8. **What's excellent:** the Gotchas page is the most useful document in the whole set — it is written from real failures and every item earned its place. Shipping `src/` inside the npm package made the ambiguities above answerable in seconds rather than guesswork.
 
 ## License
 
