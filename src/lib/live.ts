@@ -114,39 +114,45 @@ export function useOnChainAdvance<T>(
   const [manual, setManual] = useState(0);
 
   const lastRun = useRef(0);
-  const pending = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alive = useRef(true);
   const readRef = useRef(read);
   readRef.current = read;
 
+  // Tear down only when the inputs change or the component goes away — NOT on
+  // every block. Somnia produces blocks roughly ten times a second, so a cleanup
+  // keyed on the block would cancel each pending read before it could fire and
+  // the fetch would never happen at all.
   useEffect(() => {
-    let cancelled = false;
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
 
-    const since = Date.now() - lastRun.current;
-    const wait = pending.current ? 0 : Math.max(0, minIntervalMs - since);
+  useEffect(() => {
+    // Leading-edge throttle: the first advance runs immediately, and further
+    // advances while a run is already queued are absorbed into it.
+    if (timer.current) return;
 
-    const timer = setTimeout(() => {
-      if (cancelled) return;
-      pending.current = true;
+    const wait = Math.max(0, minIntervalMs - (Date.now() - lastRun.current));
+    timer.current = setTimeout(() => {
+      timer.current = null;
       lastRun.current = Date.now();
       readRef
         .current()
         .then((value) => {
-          if (cancelled) return;
+          if (!alive.current) return;
           setData(value);
           setError(null);
         })
         .catch((err) => {
-          if (!cancelled) setError(String(err).slice(0, 200));
-        })
-        .finally(() => {
-          pending.current = false;
+          if (alive.current) setError(String(err).slice(0, 200));
         });
     }, wait);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block, manual, ...deps]);
 
