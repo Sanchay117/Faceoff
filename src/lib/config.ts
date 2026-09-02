@@ -94,15 +94,27 @@ export const FEES = {
  * a wallet holding a fraction of an STT can transact — which is the whole point
  * of an app that funds its own players.
  */
+/**
+ * Per-write gas ceilings, set from measurement rather than from Ethereum habits.
+ *
+ * Somnia meters gas far higher than Ethereum for the same work — roughly 20-27x.
+ * Measured on Shannon:
+ *
+ *   plain STT transfer      421,000     (Ethereum: 21,000)
+ *   collateral faucet()   1,379,707     (Ethereum ERC-20 mint: ~50,000)
+ *   open a duel             486,320     post-only, rests
+ *   accept a duel         1,044,910     fill-or-kill, crosses and mints a pair
+ *
+ * This is why the SDK defaults to a 10,000,000 ceiling — it is not being lazy.
+ * The costly default is the 60 gwei FEE, not the limit. Each value below carries
+ * roughly 2x headroom over the heaviest observed call; anyone reusing Ethereum's
+ * numbers here will under-provision, burn the whole allowance, and get a revert
+ * with no useful reason attached.
+ */
 export const GAS = {
-  /**
-   * Placing an order, including the one-time ERC-20 approval path. Measured on
-   * Shannon: 486k to rest a post-only duel, 1.04M for a fill-or-kill that
-   * crosses and mints a pair. 2M is ~2x the heaviest observed call.
-   */
-  order: 2_000_000n,
-  cancel: 600_000n,
-  faucet: 300_000n,
+  order: 2_500_000n,
+  cancel: 1_500_000n,
+  faucet: 3_000_000n,
   /** Batched redemption grows with the number of entries. */
-  redeem: 3_000_000n,
+  redeem: 4_000_000n,
 } as const;

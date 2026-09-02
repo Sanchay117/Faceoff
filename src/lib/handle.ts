@@ -20,8 +20,11 @@ const NOUNS = [
 ];
 
 export function handleFor(address: string): string {
-  const n = parseInt(address.slice(2, 10), 16);
-  return `${ADJECTIVES[n % ADJECTIVES.length]}${NOUNS[(n >> 4) % NOUNS.length]}`;
+  // `>>> 0` and `>>>` deliberately, not `>>`. Eight hex digits can exceed 2^31,
+  // and JavaScript's signed shift turns those into negatives — which index off
+  // the front of the array and render as "Neonundefined".
+  const n = parseInt(address.slice(2, 10), 16) >>> 0;
+  return `${ADJECTIVES[n % ADJECTIVES.length]}${NOUNS[(n >>> 4) % NOUNS.length]}`;
 }
 
 export function shortAddress(address: string): string {

@@ -270,19 +270,26 @@ async function sweepBack(): Promise<void> {
   ] as const) {
     try {
       const balance = await pub.getBalance({ address: account.address });
-      // A plain transfer is 21,000 gas; leave exactly its cost behind.
-      const fee = 21_000n * 12_000_000_000n;
+      // NOT 21,000: Somnia charges more than the base transfer cost when the
+      // transfer creates an account, and an under-provisioned limit burns the
+      // whole allowance and reverts. Estimate, then keep a margin.
+      const estimate = await pub.estimateGas({
+        account,
+        to: treasury,
+        value: 1n,
+      });
+      const fee = (estimate * 2n) * 12_000_000_000n;
       if (balance <= fee) continue;
 
       const w = createWalletClient({ account, chain: somniaShannon, transport });
       const hash = await w.sendTransaction({
         to: treasury,
         value: balance - fee,
-        gas: 21_000n,
         maxFeePerGas: 12_000_000_000n,
         maxPriorityFeePerGas: 0n,
       });
-      await pub.waitForTransactionReceipt({ hash });
+      const receipt = await pub.waitForTransactionReceipt({ hash });
+      if (receipt.status === "reverted") throw new Error("transfer reverted");
       console.log(`  ${name}: returned ${formatEther(balance - fee)} STT`);
     } catch (err) {
       console.log(`  ${name}: sweep failed —`, String(err).slice(0, 100));

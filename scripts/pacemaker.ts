@@ -30,10 +30,10 @@
 import { createPublicClient, formatEther, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
-import { COLLATERAL } from "../src/lib/account";
+import { COLLATERAL, claimCollateral } from "../src/lib/account";
 import { NETWORK } from "../src/lib/config";
 import { createDuel, listOpenDuels, DuelError } from "../src/lib/duels";
-import { readExchange, signerExchangeFor } from "../src/lib/exchange";
+import { readExchange } from "../src/lib/exchange";
 import { listLiveMarkets, loadMarket, marketLabel, STATUS } from "../src/lib/markets";
 import type { Side } from "../src/lib/tag";
 
@@ -43,12 +43,16 @@ try {
   /* env may already be set */
 }
 
-/** Cadences to keep stocked. Short enough to settle inside a demo. */
-const TARGET_CADENCES = [900, 3600];
+/**
+ * Cadences to keep stocked. The 15-minute window is the sweet spot: long enough
+ * to send someone a link, short enough to settle while they are still watching.
+ * Widen this once the gas budget allows — every rung is a transaction.
+ */
+const TARGET_CADENCES = [900];
 /** Half-spread in probability. 0.02 → the taker pays 0.52 to win 1.00. */
 const SPREAD = 0.02;
 /** Conviction rungs, as the taker's implied probability distance from even. */
-const RUNGS = [0, 0.12, 0.25];
+const RUNGS = [0, 0.15];
 /** Pot per duel, in collateral. */
 const POT = 10;
 /** Keep at least this much collateral spare rather than quoting it all away. */
@@ -102,7 +106,10 @@ async function cycle(key: `0x${string}`, me: `0x${string}`): Promise<void> {
   if (spendable <= POT) {
     log(`⚠ low collateral (${(Number(collateral) / 1e6).toFixed(2)} tUSDC) — minting more`);
     try {
-      await signerExchangeFor(key).trader.faucet();
+      // Through the shared helper, so it inherits the sized gas ceiling. Calling
+      // trader.faucet() raw uses the SDK's 10M default, which reserves more STT
+      // than this bot is ever funded with.
+      await claimCollateral(key);
     } catch (err) {
       log("faucet failed", String(err).slice(0, 120));
     }
