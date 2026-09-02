@@ -19,5 +19,8 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 
-# local audio scratch for the demo video
-voiceover/
+# generated demo audio (the builder lives in scripts/voiceover.ts)
+voiceover/*.m4a
+voiceover/*.aiff
+voiceover/*.wav
+voiceover/.work/

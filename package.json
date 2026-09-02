@@ -10,7 +10,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "lifecycle": "tsx scripts/lifecycle.ts",
-    "pacemaker": "tsx scripts/pacemaker.ts"
+    "pacemaker": "tsx scripts/pacemaker.ts",
+    "voiceover": "tsx scripts/voiceover.ts"
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.29.0",
