@@ -25,6 +25,26 @@ const publicClient = createPublicClient({ chain: somniaShannon, transport });
 const lastDrip = new Map<string, number>();
 const COOLDOWN_MS = 60_000;
 
+/**
+ * Who the treasury is and how it's doing.
+ *
+ * Public information — an address and a balance — so the top-up page can show
+ * where gas comes from without the client ever holding the key.
+ */
+export async function GET() {
+  const key = process.env.TREASURY_PRIVATE_KEY;
+  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {
+    return NextResponse.json({ ok: false, error: "No treasury configured." }, { status: 503 });
+  }
+  const address = privateKeyToAccount(key as `0x${string}`).address;
+  try {
+    const balance = await publicClient.getBalance({ address });
+    return NextResponse.json({ ok: true, address, balance: balance.toString() });
+  } catch {
+    return NextResponse.json({ ok: true, address, balance: null });
+  }
+}
+
 export async function POST(request: Request) {
   const key = process.env.TREASURY_PRIVATE_KEY;
   if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {
