@@ -1,3 +1,4 @@
+import { GAS } from "./config";
 import { readExchange, signerExchangeFor } from "./exchange";
 import { snapCadence } from "./markets";
 
@@ -145,6 +146,7 @@ export async function claimAll(
       outcomeIdx: p.outcomeIndex,
       amount: p.balance,
     })),
+    gas: GAS.redeem,
   });
 
   return { hash: res.hash, claimed: claimable.length, total: totalPayout(claimable) };

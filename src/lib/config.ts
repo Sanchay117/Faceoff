@@ -56,3 +56,38 @@ export const GAS_DRIP_WEI = 100_000_000_000_000_000n; // 0.1 STT
 
 /** Below this, a wallet gets topped up again on next request. */
 export const GAS_LOW_WATER_WEI = 20_000_000_000_000_000n; // 0.02 STT
+
+/**
+ * Fee ceiling for SDK-signed writes.
+ *
+ * The SDK never estimates fees — it signs with a fixed `maxFeePerGas` and a
+ * fixed gas limit, and the node checks `balance >= gasLimit * maxFeePerGas`
+ * BEFORE it will accept the transaction. The SDK's defaults are 60 gwei and a
+ * 10,000,000 gas ceiling, which demands **0.6 STT of headroom per write** even
+ * though the transaction actually costs a fraction of a cent and the unused
+ * margin is refunded.
+ *
+ * That is more than a Shannon faucet dispenses in a day, so every write from a
+ * freshly funded wallet fails with a bare "insufficient balance" while the
+ * wallet visibly holds funds. Shannon's base fee is 6 gwei, so 12 gwei is a 2x
+ * ceiling with room to spare, and the per-call limits below are sized to the
+ * work each write actually does.
+ */
+export const FEES = {
+  maxFeePerGas: 12_000_000_000n, // 12 gwei — 2x the observed 6 gwei base fee
+  maxPriorityFeePerGas: 0n,
+} as const;
+
+/**
+ * Per-write gas ceilings. Generous for the work involved, but small enough that
+ * a wallet holding a fraction of an STT can transact — which is the whole point
+ * of an app that funds its own players.
+ */
+export const GAS = {
+  /** Placing an order, including the one-time ERC-20 approval path. */
+  order: 4_000_000n,
+  cancel: 1_000_000n,
+  faucet: 500_000n,
+  /** Batched redemption grows with the number of entries. */
+  redeem: 6_000_000n,
+} as const;

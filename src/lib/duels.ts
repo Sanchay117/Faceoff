@@ -1,5 +1,6 @@
 import { ORDER_TYPE } from "@somnia-chain/markets-sdk";
 import type { PlaceOrderResult } from "@somnia-chain/markets-sdk";
+import { GAS } from "./config";
 import { readExchange, signerExchangeFor } from "./exchange";
 import { loadMarket, STATUS, type DuelMarket, type LiveMarket } from "./markets";
 import { buySideFor, decodeTag, encodeTag, opposite, type Side } from "./tag";
@@ -160,6 +161,58 @@ export async function getDuel(
   return toDuel(marketId, pool, o as OnchainOrderish);
 }
 
+/**
+ * The band of odds a duel can rest at without crossing what is already there.
+ *
+ * A duel is POST_ONLY, and the pool REVERTS a post-only that would cross rather
+ * than silently taking liquidity. That is the behaviour we want — a challenge
+ * should wait for the person you sent it to — but it means the odds a creator
+ * picks have to sit outside the current touch, and we would rather tell them
+ * that up front than let the transaction bounce.
+ *
+ * In the pool's Up terms:
+ *   - backing UP rests as a BID, so it must sit strictly BELOW the best ask
+ *   - backing DOWN rests as an ASK, so it must sit strictly ABOVE the best bid
+ */
+export interface RestBand {
+  bestYesBid: bigint | null;
+  bestYesAsk: bigint | null;
+  /** Highest Up price an UP duel can rest at. */
+  maxUpForUp: bigint;
+  /** Lowest Up price a DOWN duel can rest at. */
+  minUpForDown: bigint;
+}
+
+export async function restBand(market: DuelMarket): Promise<RestBand> {
+  const ONE = 10n ** BigInt(market.grid.decimals);
+  const tick = market.grid.tickSize;
+
+  let bestYesBid: bigint | null = null;
+  let bestYesAsk: bigint | null = null;
+  try {
+    const book = await readExchange().client.getBinaryOrderBook(market.pool, {
+      depth: 5,
+      decimals: market.grid.decimals,
+    });
+    bestYesBid = book.yesBids[0]?.price ?? null;
+    bestYesAsk = book.yesAsks[0]?.price ?? null;
+  } catch {
+    /* an unreadable book just means no constraint we can see */
+  }
+
+  return {
+    bestYesBid,
+    bestYesAsk,
+    maxUpForUp: bestYesAsk === null ? ONE - tick : bestYesAsk - tick,
+    minUpForDown: bestYesBid === null ? tick : bestYesBid + tick,
+  };
+}
+
+/** True when this side can rest at this Up price without crossing. */
+export function canRest(side: Side, rawUpPrice: bigint, band: RestBand): boolean {
+  return side === "UP" ? rawUpPrice <= band.maxUpForUp : rawUpPrice >= band.minUpForDown;
+}
+
 /* ------------------------------------------------------------------ writing */
 
 export class DuelError extends Error {
@@ -250,6 +303,7 @@ export async function createDuel(input: CreateDuelInput): Promise<CreateDuelResu
       quantity: rawQuantity,
       orderType: ORDER_TYPE.POST_ONLY,
       userData: encodeTag(input.side, nonce),
+      gas: GAS.order,
     });
 
     if (res.receipt?.status === "reverted")
@@ -280,6 +334,20 @@ export interface AcceptDuelResult {
   avgPrice: bigint;
   side: Side;
   market: DuelMarket;
+  /**
+   * How much of the fill actually came from the duel we were sent to take.
+   *
+   * An order book matches by price-then-time and there is no way to target one
+   * resting order, so if a better-priced order is sitting there when you accept,
+   * the pool fills you against THAT instead. You get a better price, but you did
+   * not bet against the person who sent you the link — and saying you did would
+   * be a lie. We compare each fill's `makerOrderId` against the duel's own id.
+   */
+  matchedFromDuel: bigint;
+  /** True when the whole fill came from somewhere other than the duel. */
+  matchedElsewhere: boolean;
+  /** The creator, when we really did match them. */
+  opponent: `0x${string}` | null;
 }
 
 /**
@@ -317,6 +385,7 @@ export async function acceptDuel(input: {
       quantity: duel.rawRemaining,
       orderType: ORDER_TYPE.FILL_OR_KILL,
       userData: encodeTag(takerSide, duel.nonce),
+      gas: GAS.order,
     });
 
     if (res.receipt?.status === "reverted")
@@ -331,12 +400,20 @@ export async function acceptDuel(input: {
 
     const notional = res.fills.reduce((n, f) => n + f.quantityFilled * f.fillPrice, 0n);
 
+    // Which of those fills came from the duel we were actually sent to take?
+    const matchedFromDuel = res.fills
+      .filter((f) => f.makerOrderId === duel.orderId)
+      .reduce((n, f) => n + f.quantityFilled, 0n);
+
     return {
       hash: res.hash,
       filledQuantity: filled,
       avgPrice: filled > 0n ? notional / filled : duel.rawPrice,
       side: takerSide,
       market,
+      matchedFromDuel,
+      matchedElsewhere: matchedFromDuel === 0n,
+      opponent: matchedFromDuel > 0n ? duel.creator : null,
     };
   } catch (err) {
     if (err instanceof DuelError) throw err;
@@ -352,7 +429,11 @@ export async function cancelDuel(input: {
 }): Promise<{ hash: string }> {
   const ex = signerExchangeFor(input.privateKey);
   try {
-    const res = await ex.trader.cancelOrder({ pool: input.pool, orderId: input.orderId });
+    const res = await ex.trader.cancelOrder({
+      pool: input.pool,
+      orderId: input.orderId,
+      gas: GAS.cancel,
+    });
     return { hash: res.hash };
   } catch (err) {
     throw classify(err);

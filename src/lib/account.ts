@@ -1,4 +1,5 @@
 import { SOMNIA_TESTNET_ADDRESSES } from "@somnia-chain/markets-sdk";
+import { GAS } from "./config";
 import { readExchange, signerExchangeFor } from "./exchange";
 
 export const COLLATERAL = SOMNIA_TESTNET_ADDRESSES.collateral as `0x${string}`;
@@ -34,7 +35,9 @@ export async function claimCollateral(
   amount?: bigint,
 ): Promise<{ hash: string }> {
   const ex = signerExchangeFor(privateKey);
-  const res = await ex.trader.faucet(amount ? { amount } : {});
+  const res = await ex.trader.faucet(
+    amount ? { amount, gas: GAS.faucet } : { gas: GAS.faucet },
+  );
   return { hash: res.hash };
 }
 

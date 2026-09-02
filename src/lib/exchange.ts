@@ -4,7 +4,7 @@ import {
   SOMNIA_TESTNET_PRICE_FEED,
 } from "@somnia-chain/markets-sdk";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
-import { NETWORK } from "./config";
+import { FEES, NETWORK } from "./config";
 
 /**
  * SomniaMarkets instances are isolated — "no global setup, no hidden singleton;
@@ -21,6 +21,8 @@ const base = {
   // The on-chain EMA price oracle, so a duel in flight can show whether the
   // asset is currently above or below where the window opened.
   priceFeed: SOMNIA_TESTNET_PRICE_FEED,
+  // Sized so a faucet-funded wallet can actually transact — see FEES.
+  fees: FEES,
 } as const;
 
 let readOnly: SomniaMarkets | null = null;
