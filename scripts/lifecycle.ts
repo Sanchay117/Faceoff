@@ -33,10 +33,11 @@ try {
   /* fall back to whatever is already in the environment */
 }
 
-// Comfortably above the largest per-write reserve (order: 4M gas x 12 gwei =
-// 0.048 STT). The node checks `balance >= gasLimit * maxFeePerGas` before it
-// will even accept a transaction, so headroom matters more than actual cost.
-const GAS_PER_PLAYER = parseEther("0.12");
+// Comfortably above the largest per-write reserve (order: 2M gas x 12 gwei =
+// 0.024 STT). The node checks `balance >= gasLimit * maxFeePerGas` before it
+// will even accept a transaction, so headroom matters more than actual cost —
+// a duel only SPENDS about 0.003, and whatever is left is swept back at the end.
+const GAS_PER_PLAYER = parseEther("0.05");
 const FAUCET_AMOUNT = 1_000n * 10n ** 6n; // 1,000 tUSDC (6dp on Shannon)
 
 const transport = http(NETWORK.httpRpcUrl);
@@ -246,7 +247,49 @@ async function main() {
       ? "\n\x1b[32m✓ PASS — two buyers, no seller, no market maker. The pool minted the pair.\x1b[0m"
       : "\n\x1b[31m✗ FAIL — see the tables above.\x1b[0m",
   );
+
+  await sweepBack();
   process.exit(ok ? 0 : 1);
+}
+
+/**
+ * Return the players' unspent gas to the treasury.
+ *
+ * These wallets are generated fresh every run and their keys are gone the moment
+ * the process exits, so anything left in them is stranded forever. A duel only
+ * spends about 0.003 STT of the 0.05 it needs to hold, so without this a single
+ * test run burns most of a faucet claim for nothing.
+ */
+async function sweepBack(): Promise<void> {
+  const treasury = privateKeyToAccount(process.env.TREASURY_PRIVATE_KEY as `0x${string}`).address;
+  log("Sweeping unspent gas back to the treasury");
+
+  for (const [name, key, account] of [
+    ["alice", ALICE_KEY, alice],
+    ["bob", BOB_KEY, bob],
+  ] as const) {
+    try {
+      const balance = await pub.getBalance({ address: account.address });
+      // A plain transfer is 21,000 gas; leave exactly its cost behind.
+      const fee = 21_000n * 12_000_000_000n;
+      if (balance <= fee) continue;
+
+      const w = createWalletClient({ account, chain: somniaShannon, transport });
+      const hash = await w.sendTransaction({
+        to: treasury,
+        value: balance - fee,
+        gas: 21_000n,
+        maxFeePerGas: 12_000_000_000n,
+        maxPriorityFeePerGas: 0n,
+      });
+      await pub.waitForTransactionReceipt({ hash });
+      console.log(`  ${name}: returned ${formatEther(balance - fee)} STT`);
+    } catch (err) {
+      console.log(`  ${name}: sweep failed —`, String(err).slice(0, 100));
+    }
+  }
+
+  console.log(`  treasury now: ${formatEther(await pub.getBalance({ address: treasury }))} STT`);
 }
 
 main().catch((err) => {

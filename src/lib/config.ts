@@ -51,11 +51,22 @@ export const CADENCE_LABELS: Record<number, string> = {
   86400: "1 day",
 };
 
-/** How much STT the faucet route drips to a fresh burner wallet, in wei. */
-export const GAS_DRIP_WEI = 100_000_000_000_000_000n; // 0.1 STT
+/**
+ * How much STT the faucet route drips to a fresh burner wallet, in wei.
+ *
+ * Sized against measured cost, not guesswork. On Shannon a duel costs ~486k gas
+ * to open and ~1.04M to accept (0.003 and 0.006 STT). The binding constraint is
+ * not the spend but the RESERVE — see FEES — so a drip needs to clear the
+ * largest `gasLimit * maxFeePerGas` with room for a session's worth of trades.
+ */
+export const GAS_DRIP_WEI = 50_000_000_000_000_000n; // 0.05 STT — reserve + ~8 duels
 
-/** Below this, a wallet gets topped up again on next request. */
-export const GAS_LOW_WATER_WEI = 20_000_000_000_000_000n; // 0.02 STT
+/**
+ * Below this, a wallet gets topped up again on next request. Deliberately kept
+ * ABOVE the per-write reserve so a player is never left holding a balance too
+ * small to transact but too large to trigger a refill.
+ */
+export const GAS_LOW_WATER_WEI = 30_000_000_000_000_000n; // 0.03 STT
 
 /**
  * Fee ceiling for SDK-signed writes.
@@ -84,10 +95,14 @@ export const FEES = {
  * of an app that funds its own players.
  */
 export const GAS = {
-  /** Placing an order, including the one-time ERC-20 approval path. */
-  order: 4_000_000n,
-  cancel: 1_000_000n,
-  faucet: 500_000n,
+  /**
+   * Placing an order, including the one-time ERC-20 approval path. Measured on
+   * Shannon: 486k to rest a post-only duel, 1.04M for a fill-or-kill that
+   * crosses and mints a pair. 2M is ~2x the heaviest observed call.
+   */
+  order: 2_000_000n,
+  cancel: 600_000n,
+  faucet: 300_000n,
   /** Batched redemption grows with the number of entries. */
-  redeem: 6_000_000n,
+  redeem: 3_000_000n,
 } as const;
