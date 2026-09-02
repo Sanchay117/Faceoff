@@ -311,12 +311,24 @@ function MatchedView({ market, result }: { market: DuelMarket; result: AcceptDue
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-10">
       <div className="card px-6 py-10 text-center rise">
-        <div className="text-5xl">🤝</div>
+        <div className="text-5xl">{result.matchedElsewhere ? "🎯" : "🤝"}</div>
         <h1 className="mt-4 text-3xl font-black">You&apos;re in.</h1>
-        <p className="mt-2 text-sm text-muted">
-          Matched directly against your opponent — the pool minted both sides of this contract from
-          your two stakes.
-        </p>
+        {result.matchedElsewhere ? (
+          // Honest reporting beats a nice story. The book matches by price then
+          // time and no order can be targeted, so a better-priced resting order
+          // takes precedence — the taker wins on price and loses the duel.
+          <p className="mt-2 text-sm text-muted">
+            You got a <span className="text-up">better price</span> than the challenge offered, so
+            the book filled you there instead. You&apos;re on{" "}
+            <span className="font-semibold">{result.side}</span> at better odds — but this one
+            wasn&apos;t against them, and their challenge is still open.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-muted">
+            Matched directly against your opponent — the pool minted both sides of this contract
+            from your two stakes.
+          </p>
+        )}
 
         <div className="mt-6 flex items-center justify-center">
           <SidePill side={result.side} />

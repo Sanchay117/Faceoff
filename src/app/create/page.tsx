@@ -6,8 +6,8 @@ import { LoadingBlock } from "@/components/AppShell";
 import { useWallet, cleanError } from "@/components/WalletProvider";
 import { Banner, Button, Countdown, fmtNum } from "@/components/ui";
 import { COLLATERAL_DECIMALS } from "@/lib/account";
-import { createDuel } from "@/lib/duels";
-import { listLiveMarkets, marketLabel, type LiveMarket } from "@/lib/markets";
+import { createDuel, restBand } from "@/lib/duels";
+import { listLiveMarkets, loadMarket, marketLabel, type LiveMarket } from "@/lib/markets";
 import type { Side } from "@/lib/tag";
 
 const POT_PRESETS = [5, 10, 25, 100];
@@ -41,6 +41,41 @@ export default function CreatePage() {
     () => markets?.find((m) => m.marketId === marketId) ?? null,
     [markets, marketId],
   );
+
+  /**
+   * A duel rests post-only, and the pool reverts a post-only that would cross.
+   * So there is a ceiling on how confident you can be before your odds run into
+   * what is already resting — past that point the honest answer is "someone is
+   * already offering this, go take it" rather than a failed transaction.
+   */
+  const [maxConfidence, setMaxConfidence] = useState(95);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!marketId) return;
+    void (async () => {
+      try {
+        const full = await loadMarket(marketId);
+        const band = await restBand(full);
+        const one = 10 ** full.grid.decimals;
+        const ceiling =
+          side === "UP"
+            ? (Number(band.maxUpForUp) / one) * 100
+            : (1 - Number(band.minUpForDown) / one) * 100;
+        if (!cancelled) setMaxConfidence(Math.max(5, Math.min(95, Math.floor(ceiling))));
+      } catch {
+        if (!cancelled) setMaxConfidence(95);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [marketId, side]);
+
+  // Keep the slider inside the band as the market or side changes.
+  useEffect(() => {
+    setConfidence((c) => Math.min(c, maxConfidence));
+  }, [maxConfidence]);
 
   const myStake = (pot * confidence) / 100;
   const theirStake = pot - myStake;
@@ -174,7 +209,7 @@ export default function CreatePage() {
             id="confidence"
             type="range"
             min={5}
-            max={95}
+            max={maxConfidence}
             value={confidence}
             onChange={(e) => setConfidence(Number(e.target.value))}
             className="mt-2 w-full"
@@ -186,6 +221,12 @@ export default function CreatePage() {
             The surer you are, the more of the pot you put up — and the better the deal you offer
             them.
           </p>
+          {maxConfidence < 95 && (
+            <p className="mt-1 text-xs text-faint">
+              Capped at {maxConfidence}% — past that, someone on the open book is already offering
+              these odds, so you&apos;d be taking their bet instead of opening your own.
+            </p>
+          )}
         </div>
 
         <div className="card-2 mt-5 p-4">
