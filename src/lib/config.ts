@@ -59,14 +59,14 @@ export const CADENCE_LABELS: Record<number, string> = {
  * not the spend but the RESERVE — see FEES — so a drip needs to clear the
  * largest `gasLimit * maxFeePerGas` with room for a session's worth of trades.
  */
-export const GAS_DRIP_WEI = 50_000_000_000_000_000n; // 0.05 STT — reserve + ~8 duels
+export const GAS_DRIP_WEI = 35_000_000_000_000_000n; // 0.035 STT — reserve + ~8 duels
 
 /**
  * Below this, a wallet gets topped up again on next request. Deliberately kept
  * ABOVE the per-write reserve so a player is never left holding a balance too
  * small to transact but too large to trigger a refill.
  */
-export const GAS_LOW_WATER_WEI = 30_000_000_000_000_000n; // 0.03 STT
+export const GAS_LOW_WATER_WEI = 25_000_000_000_000_000n; // 0.025 STT
 
 /**
  * Fee ceiling for SDK-signed writes.
@@ -85,9 +85,15 @@ export const GAS_LOW_WATER_WEI = 30_000_000_000_000_000n; // 0.03 STT
  * work each write actually does.
  */
 export const FEES = {
-  maxFeePerGas: 12_000_000_000n, // 12 gwei — 2x the observed 6 gwei base fee
+  // Sampled across ~1,200 Shannon blocks: the base fee sat at exactly 6 gwei
+  // every time. Somnia's flat gas market means a huge ceiling buys nothing but
+  // a bigger reserve, so 9 gwei is 1.5x headroom on a fee that does not move.
+  maxFeePerGas: 9_000_000_000n,
   maxPriorityFeePerGas: 0n,
 } as const;
+
+/** What a single order must have spare before the node will accept it. */
+export const ORDER_RESERVE_WEI = 2_500_000n * 9_000_000_000n; // 0.0225 STT
 
 /**
  * Per-write gas ceilings. Generous for the work involved, but small enough that

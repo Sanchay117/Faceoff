@@ -43,6 +43,8 @@ git branch -M main && git push -u origin main
 
 You'll get a URL like `https://faceoff-xyz.vercel.app`. That is what goes in the DoraHacks submission.
 
+**Deployed:** https://faceoff-orpin.vercel.app
+
 ## 3. Check it works
 
 Open the URL on your **phone**, not just your laptop — judges will.

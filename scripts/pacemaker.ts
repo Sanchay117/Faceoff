@@ -31,7 +31,7 @@ import { createPublicClient, formatEther, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
 import { COLLATERAL, claimCollateral } from "../src/lib/account";
-import { NETWORK } from "../src/lib/config";
+import { NETWORK, ORDER_RESERVE_WEI } from "../src/lib/config";
 import { createDuel, listOpenDuels, DuelError } from "../src/lib/duels";
 import { readExchange } from "../src/lib/exchange";
 import { listLiveMarkets, loadMarket, marketLabel, STATUS } from "../src/lib/markets";
@@ -99,8 +99,13 @@ async function cycle(key: `0x${string}`, me: `0x${string}`): Promise<void> {
   ]);
   const spendable = Number(collateral) / 1e6 - RESERVE;
 
-  if (gas < 10_000_000_000_000_000n) {
-    log(`⚠ low gas (${formatEther(gas)} STT) — top up ${me}`);
+  // The node rejects a write unless the wallet can cover gasLimit *
+  // maxFeePerGas, so quoting below twice that reserve just produces a stream of
+  // reverts that each look like a different problem. Say it once instead.
+  if (gas < ORDER_RESERVE_WEI * 2n) {
+    log(
+      `⚠ out of gas headroom: ${formatEther(gas)} STT, need ${formatEther(ORDER_RESERVE_WEI * 2n)}. Top up ${me}`,
+    );
     return;
   }
   if (spendable <= POT) {

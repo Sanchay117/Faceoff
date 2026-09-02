@@ -8,6 +8,34 @@ Built for the Somnia × DreamDEX Event Contracts Hackathon. Live on Somnia Shann
 
 ---
 
+**Live:** https://faceoff-orpin.vercel.app · **Network:** Somnia Shannon testnet (chain `50312`)
+
+---
+
+## Two minutes, as a judge
+
+No wallet, no extension, no faucet hunt. Open the live link on a phone or in two browser windows.
+
+1. **Open the Arena.** Every card is a real resting order on a DreamDEX binary pool, read from the pool contract. The badge in the corner reports the local tail's own state and the last block it materialized — when it says Live, the page is being driven by chain events, not a refresh timer.
+2. **Tap "Play — no wallet needed."** A wallet is generated in the browser, gas is dripped to it, and play collateral is minted from the tUSDC token's own `faucet()`. You are trading in about ten seconds.
+3. **Start a duel.** Pick BTC, 15 minutes, a side, and drag the confidence slider. That slider *is* the order price: 60% confident means you put up 6 of a 10 pot and quote a 0.60 Up limit. Sign once.
+4. **Open the link in a second window** (use incognito so it gets its own wallet) and take the other side.
+5. **Watch the scoreboard.** When the badge reads **MINT-A-PAIR**, that is the protocol reporting that *no seller was involved* — the pool minted both outcome tokens from the two stakes. Beneath it, BTC's live price against the exact line the window settles on.
+
+Then `npm run lifecycle` proves the same thing headless, asserting every step against chain state.
+
+## How this maps to the criteria
+
+| Criterion | | Where to look |
+|---|---|---|
+| **Innovation** | 20% | Mint-a-pair reframed as a *social* primitive, not a microstructure footnote. Duels are resting orders that identify themselves on-chain via `userData`, so the app has **no database at all** and anyone can enumerate every open duel from a public RPC. |
+| **Technical** | 25% | Write-heavy, not read-only: post-only creation, fill-or-kill matching, hand-quantized units on the raw trader tier, batched `redeemMany`, and the SDK's reactive tail instead of polling. Every documented gotcha handled explicitly ([table below](#the-gotchas-handled)). Verified end-to-end on testnet with real transactions. |
+| **UX & Design** | 20% | Two taps and a link. No wallet install, no seed phrase, no signature popups. Confidence, not probability. Phone-first. |
+| **Ecosystem** | 20% | Every invite is a new user and every accepted invite is on-chain volume, because the invitation and the trade are the same object. Faceoff solves cold-start rather than describing it. |
+| **Presentation** | 15% | Live URL, two-minute judge path above, a headless proof anyone can rerun, and a [feedback report](#feedback-on-the-sdk-and-docs) on six concrete SDK and documentation issues found while building. |
+
+---
+
 ## The idea
 
 Every prediction market has the same cold-start problem: **your bet only happens if someone is already there to take it.** An empty order book is an empty product. Right now, most live Event Contract windows on Shannon have zero trades in them — the mechanism works, but there is nobody on the other side.
