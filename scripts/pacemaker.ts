@@ -31,8 +31,8 @@ import { createPublicClient, formatEther, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
 import { COLLATERAL, claimCollateral } from "../src/lib/account";
-import { NETWORK, ORDER_RESERVE_WEI } from "../src/lib/config";
-import { createDuel, listOpenDuels, DuelError } from "../src/lib/duels";
+import { GAS, NETWORK, ORDER_RESERVE_WEI } from "../src/lib/config";
+import { canRest, createDuel, listOpenDuels, restBand, DuelError } from "../src/lib/duels";
 import { readExchange } from "../src/lib/exchange";
 import { listLiveMarkets, loadMarket, marketLabel, STATUS } from "../src/lib/markets";
 import type { Side } from "../src/lib/tag";
@@ -134,18 +134,36 @@ async function cycle(key: `0x${string}`, me: `0x${string}`): Promise<void> {
     const market = await loadMarket(row.marketId);
     if (market.status !== STATUS.Trading) continue;
 
+    // A post-only that would cross is rejected by the pool, so read the band
+    // once per market and clamp each rung inside it rather than firing orders
+    // that are guaranteed to bounce.
+    const band = await restBand(market);
+    const one = 10 ** market.grid.decimals;
+
     const open = await listOpenDuels(market.marketId, market.pool);
     const mine = open.filter((d) => d.creator.toLowerCase() === me.toLowerCase());
     const taken = open.filter((d) => d.creator.toLowerCase() !== me.toLowerCase()).length;
 
     for (const rung of ladder()) {
-      const targetPrice = BigInt(Math.round(rung.upProbability * 10 ** market.grid.decimals));
+      // Pull the quote to the edge of what can rest, so a busy book narrows our
+      // ladder instead of silencing it.
+      const limit =
+        rung.side === "UP" ? Number(band.maxUpForUp) / one : Number(band.minUpForDown) / one;
+      const upProbability =
+        rung.side === "UP"
+          ? Math.min(rung.upProbability, limit)
+          : Math.max(rung.upProbability, limit);
+
+      if (upProbability < 0.02 || upProbability > 0.98) continue;
+
+      const targetPrice = BigInt(Math.round(upProbability * 10 ** market.grid.decimals));
+      if (!canRest(rung.side, targetPrice, band)) continue;
       const covered = mine.some(
         (d) => d.creatorSide === rung.side && absDiff(d.rawPrice, targetPrice) <= market.grid.tickSize,
       );
       if (covered) continue;
 
-      const stake = rung.side === "UP" ? POT * rung.upProbability : POT * (1 - rung.upProbability);
+      const stake = rung.side === "UP" ? POT * upProbability : POT * (1 - upProbability);
       if (budget < stake) break;
 
       try {
@@ -154,11 +172,14 @@ async function cycle(key: `0x${string}`, me: `0x${string}`): Promise<void> {
           marketId: market.marketId,
           side: rung.side,
           pot: POT,
-          upProbability: rung.upProbability,
+          upProbability,
+          // This bot deliberately quotes away from mid, which is the expensive
+          // insertion path.
+          gas: GAS.orderDeep,
         });
         budget -= stake;
         log(
-          `+ ${marketLabel(market.asset, market.intervalSec)} ${rung.side} @ ${rung.upProbability} — order ${res.orderId}`,
+          `+ ${marketLabel(market.asset, market.intervalSec)} ${rung.side} @ ${upProbability.toFixed(3)} — order ${res.orderId}`,
         );
       } catch (err) {
         if (err instanceof DuelError && err.code === "WOULD_CROSS") {

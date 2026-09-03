@@ -257,6 +257,11 @@ export interface CreateDuelInput {
   pot: number;
   /** Probability assigned to Up, in (0,1). Sets how the pot is split. */
   upProbability: number;
+  /**
+   * Gas ceiling override. Order gas scales with book depth, so a maker quoting
+   * far from the touch needs more than a player quoting near it.
+   */
+  gas?: bigint;
 }
 
 export interface CreateDuelResult {
@@ -303,7 +308,7 @@ export async function createDuel(input: CreateDuelInput): Promise<CreateDuelResu
       quantity: rawQuantity,
       orderType: ORDER_TYPE.POST_ONLY,
       userData: encodeTag(input.side, nonce),
-      gas: GAS.order,
+      gas: input.gas ?? GAS.order,
     });
 
     if (res.receipt?.status === "reverted")

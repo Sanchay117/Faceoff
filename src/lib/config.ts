@@ -54,19 +54,18 @@ export const CADENCE_LABELS: Record<number, string> = {
 /**
  * How much STT the faucet route drips to a fresh burner wallet, in wei.
  *
- * Sized against measured cost, not guesswork. On Shannon a duel costs ~486k gas
- * to open and ~1.04M to accept (0.003 and 0.006 STT). The binding constraint is
- * not the spend but the RESERVE — see FEES — so a drip needs to clear the
- * largest `gasLimit * maxFeePerGas` with room for a session's worth of trades.
+ * The binding constraint is not what a duel SPENDS (a few thousandths of an
+ * STT) but the RESERVE the node demands up front — see FEES. A drip has to
+ * clear `gasLimit * maxFeePerGas` with room for a session's worth of trades.
  */
-export const GAS_DRIP_WEI = 35_000_000_000_000_000n; // 0.035 STT — reserve + ~8 duels
+export const GAS_DRIP_WEI = 55_000_000_000_000_000n; // 0.055 STT — reserve + ~8 duels
 
 /**
  * Below this, a wallet gets topped up again on next request. Deliberately kept
  * ABOVE the per-write reserve so a player is never left holding a balance too
  * small to transact but too large to trigger a refill.
  */
-export const GAS_LOW_WATER_WEI = 25_000_000_000_000_000n; // 0.025 STT
+export const GAS_LOW_WATER_WEI = 40_000_000_000_000_000n; // 0.04 STT
 
 /**
  * Fee ceiling for SDK-signed writes.
@@ -80,9 +79,9 @@ export const GAS_LOW_WATER_WEI = 25_000_000_000_000_000n; // 0.025 STT
  *
  * That is more than a Shannon faucet dispenses in a day, so every write from a
  * freshly funded wallet fails with a bare "insufficient balance" while the
- * wallet visibly holds funds. Shannon's base fee is 6 gwei, so 12 gwei is a 2x
- * ceiling with room to spare, and the per-call limits below are sized to the
- * work each write actually does.
+ * wallet visibly holds funds. Shannon's base fee is 6 gwei, so the ceiling below
+ * is set just above it, and the per-call limits are sized to the work each
+ * write actually does.
  */
 export const FEES = {
   // Sampled across ~1,200 Shannon blocks: the base fee sat at exactly 6 gwei
@@ -93,13 +92,8 @@ export const FEES = {
 } as const;
 
 /** What a single order must have spare before the node will accept it. */
-export const ORDER_RESERVE_WEI = 2_500_000n * 9_000_000_000n; // 0.0225 STT
+export const ORDER_RESERVE_WEI = 4_000_000n * 9_000_000_000n; // 0.036 STT
 
-/**
- * Per-write gas ceilings. Generous for the work involved, but small enough that
- * a wallet holding a fraction of an STT can transact — which is the whole point
- * of an app that funds its own players.
- */
 /**
  * Per-write gas ceilings, set from measurement rather than from Ethereum habits.
  *
@@ -118,7 +112,18 @@ export const ORDER_RESERVE_WEI = 2_500_000n * 9_000_000_000n; // 0.0225 STT
  * with no useful reason attached.
  */
 export const GAS = {
-  order: 2_500_000n,
+  /**
+   * Order gas is NOT constant: it scales with how deep into the book the order
+   * lands, because the pool walks a price-ordered list to find the insertion
+   * point. Measured on Shannon — 486k resting near an empty book, but 2.46M
+   * inserting far from the touch on a populated one, which exhausted a 2.5M
+   * ceiling and reverted with no revert data at all.
+   *
+   * `order` covers a quote near the touch, which is where the create screen
+   * puts a player. `orderDeep` is for a maker quoting well away from mid.
+   */
+  order: 4_000_000n,
+  orderDeep: 9_000_000n,
   cancel: 1_500_000n,
   faucet: 3_000_000n,
   /** Batched redemption grows with the number of entries. */
