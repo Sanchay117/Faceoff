@@ -35,8 +35,16 @@ const GOLD = "#ffc857";
 type Params = { marketId: string; orderId: string };
 
 export default async function Image({ params }: { params: Promise<Params> }) {
-  const { marketId, orderId } = await params;
-  const duel = await loadDuelSafely(marketId as `0x${string}`, orderId);
+  // A share must never fail. Social crawlers do not retry, and a broken preview
+  // is worse than a generic one — so anything unexpected below degrades to the
+  // branded card rather than surfacing a 500 into someone's group chat.
+  let duel: CardData | null = null;
+  try {
+    const { marketId, orderId } = await params;
+    duel = await loadDuelSafely(marketId as `0x${string}`, orderId);
+  } catch {
+    duel = null;
+  }
 
   if (!duel) return new ImageResponse(<Fallback />, size);
 
@@ -78,15 +86,15 @@ export default async function Image({ params }: { params: Promise<Params> }) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", marginTop: 48, flex: 1 }}>
-          <div style={{ fontSize: 26, color: MUTED }}>
-            {handleFor(duel.creator)} is backing
+          <div style={{ display: "flex", fontSize: 26, color: MUTED }}>
+            {`${handleFor(duel.creator)} is backing`}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 8 }}>
             <div style={{ fontSize: 92, fontWeight: 900, color: creatorColor, letterSpacing: -2 }}>
               {duel.creatorSide === "UP" ? "▲ UP" : "▼ DOWN"}
             </div>
-            <div style={{ fontSize: 30, color: MUTED, paddingTop: 26 }}>
-              on {duel.asset}
+            <div style={{ display: "flex", fontSize: 30, color: MUTED, paddingTop: 26 }}>
+              {`on ${duel.asset}`}
             </div>
           </div>
 
@@ -117,7 +125,7 @@ export default async function Image({ params }: { params: Promise<Params> }) {
               borderRadius: 16,
             }}
           >
-            Take {takerSide} for {duel.takerStake} tUSDC
+            {`Take ${takerSide} for ${duel.takerStake} tUSDC`}
           </div>
           <div style={{ display: "flex", fontSize: 22, color: FAINT }}>
             No bookmaker · settled on-chain by Somnia

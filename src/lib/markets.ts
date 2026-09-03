@@ -108,12 +108,14 @@ export function snapCadence(sec: number): number {
 export async function loadMarket(marketId: `0x${string}`): Promise<DuelMarket> {
   const ex = readExchange();
 
-  const [onchain, rows] = await Promise.all([
+  // One row, not two hundred. This used to page the whole venue and scan for a
+  // match, which is slow enough to blow a serverless budget on the share-card
+  // route — and pointless when the indexer can answer for a single id.
+  const [onchain, row] = await Promise.all([
     ex.client.getMarketOnchain(marketId),
-    ex.client.listBinaryMarkets({ venueId: VENUE_ID, limit: 200 }),
+    ex.client.getBinaryMarket(marketId).catch(() => null),
   ]);
 
-  const row = rows.find((r) => r.marketId?.toLowerCase() === marketId.toLowerCase());
   const params = await ex.client.getBinaryBookParams(onchain.pool);
 
   return {

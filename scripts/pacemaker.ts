@@ -48,11 +48,11 @@ try {
  * to send someone a link, short enough to settle while they are still watching.
  * Widen this once the gas budget allows — every rung is a transaction.
  */
-const TARGET_CADENCES = [900];
+const TARGET_CADENCES = [900, 3600];
 /** Half-spread in probability. 0.02 → the taker pays 0.52 to win 1.00. */
 const SPREAD = 0.02;
 /** Conviction rungs, as the taker's implied probability distance from even. */
-const RUNGS = [0, 0.15];
+const RUNGS = [0, 0.15];  // 4 rungs x 4 markets ~= 0.12 STT/hour
 /** Pot per duel, in collateral. */
 const POT = 10;
 /** Keep at least this much collateral spare rather than quoting it all away. */
