@@ -12,7 +12,8 @@
     "lifecycle": "tsx scripts/lifecycle.ts",
     "pacemaker": "tsx scripts/pacemaker.ts",
     "voiceover": "tsx scripts/voiceover.ts",
-    "seed": "tsx scripts/seed-arena.ts"
+    "seed": "tsx scripts/seed-arena.ts",
+    "windows": "tsx scripts/windows.ts"
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.29.0",

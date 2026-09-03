@@ -52,12 +52,12 @@ const SEGMENTS: Segment[] = [
     pause: 1.5,
   },
   {
-    cue: "Click 'Start a duel'. Pick BTC, 15 minutes.",
-    text: "This is Faceoff. Pick a window — Bitcoin, fifteen minutes.",
+    cue: "Click 'Start a duel'. Pick the BTC window the app recommends.",
+    text: "This is Faceoff. Pick a window — Bitcoin.",
     pause: 3.5,
   },
   {
-    cue: "Click UP. Then drag the confidence slider to about 60%.",
+    cue: "Pick the side the app allows (check CUES note below). Drag confidence to 60%.",
     text: "Pick a side. Then say how sure you are. That's the only number you touch.",
     pause: 4,
   },
@@ -82,7 +82,7 @@ const SEGMENTS: Segment[] = [
     pause: 2.5,
   },
   {
-    cue: "Click 'Take DOWN'. Wait for the scoreboard.",
+    cue: "Click the big 'Take …' button. Wait for the scoreboard.",
     text: "So they take the other side.",
     pause: 6.5,
   },
@@ -201,6 +201,15 @@ function main() {
       `3. \`npm run pacemaker\` running, so the Arena isn't empty.`,
       `4. Browser zoom ~110%.`,
       `5. One silent dry run first. The whole performance is about ninety seconds of clicking.`,
+      ``,
+      `## Which side to back`,
+      ``,
+      `The create screen bounds the confidence slider to odds that keep your duel`,
+      `at the FRONT of its queue — otherwise the book hands your friend a`,
+      `better-priced order and your challenge sits unmatched. Take whichever side`,
+      `lets you sit at 60%, so the numbers match the narration (6.00 vs 4.00).`,
+      ``,
+      `Run \`npm run windows\` to see which side leads on which market right now.`,
     ].join("\n"),
   );
 
