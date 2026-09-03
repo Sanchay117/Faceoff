@@ -213,6 +213,62 @@ export function canRest(side: Side, rawUpPrice: bigint, band: RestBand): boolean
   return side === "UP" ? rawUpPrice <= band.maxUpForUp : rawUpPrice >= band.minUpForDown;
 }
 
+/**
+ * The odds that make your duel the one your friend actually matches.
+ *
+ * A book matches price-then-time and no order can be targeted, so if anything
+ * better is resting on your side when your friend opens the link, the pool fills
+ * them against THAT instead — they get a better price, and your challenge sits
+ * untouched. The only way to be the order they hit is to be the best one.
+ *
+ * Which means quoting strictly inside the current spread: better than every
+ * competing order on your side, but not so far that you cross the other side and
+ * the post-only is rejected.
+ *
+ *   backing UP   — rest as a bid above the best bid, below the best ask
+ *   backing DOWN — rest as an ask below the best ask, above the best bid
+ *
+ * Returned as a confidence range (a percentage of the pot), because that is what
+ * the create screen actually asks for.
+ */
+export interface ConfidenceRange {
+  min: number;
+  max: number;
+  /** False when the spread is too tight to sit inside — you can rest, but you won't be first in line. */
+  canLead: boolean;
+}
+
+export function confidenceRange(side: Side, band: RestBand, decimals: number): ConfidenceRange {
+  const one = 10 ** decimals;
+  const bid = band.bestYesBid === null ? null : Number(band.bestYesBid) / one;
+  const ask = band.bestYesAsk === null ? null : Number(band.bestYesAsk) / one;
+  const maxUp = Number(band.maxUpForUp) / one;
+  const minDown = Number(band.minUpForDown) / one;
+
+  let lo: number;
+  let hi: number;
+  if (side === "UP") {
+    // Up probability must beat the best bid and stay under the best ask.
+    lo = bid === null ? 0.05 : bid + 1 / one;
+    hi = maxUp;
+  } else {
+    // Confidence in DOWN maps to (1 - up price), so the bounds invert.
+    lo = ask === null ? 0.05 : 1 - ask + 1 / one;
+    hi = 1 - minDown;
+  }
+
+  const canLead = hi > lo;
+  const min = Math.max(5, Math.ceil(lo * 100));
+  const max = Math.min(95, Math.floor(hi * 100));
+
+  // A spread too tight to lead: fall back to anything that merely rests.
+  if (!canLead || max < min) {
+    const restOnly = side === "UP" ? maxUp : 1 - minDown;
+    return { min: 5, max: Math.max(5, Math.min(95, Math.floor(restOnly * 100))), canLead: false };
+  }
+  return { min, max, canLead: true };
+}
+
 /* ------------------------------------------------------------------ writing */
 
 export class DuelError extends Error {

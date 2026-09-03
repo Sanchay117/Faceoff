@@ -6,7 +6,7 @@ import { LoadingBlock } from "@/components/AppShell";
 import { useWallet, cleanError } from "@/components/WalletProvider";
 import { Banner, Button, Countdown, fmtNum } from "@/components/ui";
 import { COLLATERAL_DECIMALS } from "@/lib/account";
-import { createDuel, restBand } from "@/lib/duels";
+import { confidenceRange, createDuel, restBand } from "@/lib/duels";
 import { listLiveMarkets, loadMarket, marketLabel, type LiveMarket } from "@/lib/markets";
 import type { Side } from "@/lib/tag";
 
@@ -48,7 +48,7 @@ export default function CreatePage() {
    * what is already resting — past that point the honest answer is "someone is
    * already offering this, go take it" rather than a failed transaction.
    */
-  const [maxConfidence, setMaxConfidence] = useState(95);
+  const [range, setRange] = useState({ min: 5, max: 95, canLead: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -57,14 +57,9 @@ export default function CreatePage() {
       try {
         const full = await loadMarket(marketId);
         const band = await restBand(full);
-        const one = 10 ** full.grid.decimals;
-        const ceiling =
-          side === "UP"
-            ? (Number(band.maxUpForUp) / one) * 100
-            : (1 - Number(band.minUpForDown) / one) * 100;
-        if (!cancelled) setMaxConfidence(Math.max(5, Math.min(95, Math.floor(ceiling))));
+        if (!cancelled) setRange(confidenceRange(side, band, full.grid.decimals));
       } catch {
-        if (!cancelled) setMaxConfidence(95);
+        if (!cancelled) setRange({ min: 5, max: 95, canLead: true });
       }
     })();
     return () => {
@@ -72,10 +67,10 @@ export default function CreatePage() {
     };
   }, [marketId, side]);
 
-  // Keep the slider inside the band as the market or side changes.
+  // Keep the slider inside the range as the market or side changes.
   useEffect(() => {
-    setConfidence((c) => Math.min(c, maxConfidence));
-  }, [maxConfidence]);
+    setConfidence((c) => Math.min(Math.max(c, range.min), range.max));
+  }, [range]);
 
   const myStake = (pot * confidence) / 100;
   const theirStake = pot - myStake;
@@ -208,8 +203,8 @@ export default function CreatePage() {
           <input
             id="confidence"
             type="range"
-            min={5}
-            max={maxConfidence}
+            min={range.min}
+            max={range.max}
             value={confidence}
             onChange={(e) => setConfidence(Number(e.target.value))}
             className="mt-2 w-full"
@@ -221,12 +216,18 @@ export default function CreatePage() {
             The surer you are, the more of the pot you put up — and the better the deal you offer
             them.
           </p>
-          {maxConfidence < 95 && (
+          {range.canLead && (range.min > 5 || range.max < 95) ? (
             <p className="mt-1 text-xs text-faint">
-              Capped at {maxConfidence}% — past that, someone on the open book is already offering
-              these odds, so you&apos;d be taking their bet instead of opening your own.
+              Held between {range.min}% and {range.max}% so your challenge is the best offer on your
+              side. Outside that, the order book would hand your friend a different order and your
+              duel would sit unmatched.
             </p>
-          )}
+          ) : !range.canLead ? (
+            <p className="mt-1 text-xs text-down">
+              This market is crowded — someone may be quoting ahead of you, so your friend could get
+              matched elsewhere. A quieter window is a safer bet.
+            </p>
+          ) : null}
         </div>
 
         <div className="card-2 mt-5 p-4">
