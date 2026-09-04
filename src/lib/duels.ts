@@ -214,6 +214,34 @@ export function canRest(side: Side, rawUpPrice: bigint, band: RestBand): boolean
 }
 
 /**
+ * Move a price to the best spot it can actually rest in, right now.
+ *
+ * The create screen bounds the slider using a band read when the market was
+ * picked, but the book moves between that read and the signature. So rather
+ * than trusting the number the UI computed, the write re-reads and snaps: into
+ * the spread if it can (so the duel leads its own queue), and at minimum to
+ * somewhere that will not be rejected for crossing.
+ */
+export function snapToLead(side: Side, requested: bigint, band: RestBand, grid: Grid): bigint {
+  const tick = grid.tickSize;
+  if (side === "UP") {
+    let p = requested > band.maxUpForUp ? band.maxUpForUp : requested;
+    // Beat the best bid if there is room to.
+    if (band.bestYesBid !== null && p <= band.bestYesBid) {
+      const lead = band.bestYesBid + tick;
+      if (lead <= band.maxUpForUp) p = lead;
+    }
+    return p;
+  }
+  let p = requested < band.minUpForDown ? band.minUpForDown : requested;
+  if (band.bestYesAsk !== null && p >= band.bestYesAsk) {
+    const lead = band.bestYesAsk - tick;
+    if (lead >= band.minUpForDown) p = lead;
+  }
+  return p;
+}
+
+/**
  * Would taking this duel actually match THIS duel?
  *
  * The clamp on the create screen makes a challenge best-priced when it is
@@ -385,43 +413,58 @@ export async function createDuel(input: CreateDuelInput): Promise<CreateDuelResu
   if (market.status !== STATUS.Trading)
     throw new DuelError("This window is no longer taking orders.", "MARKET_CLOSED");
 
-  const rawPrice = probabilityToRawPrice(input.upProbability, market.grid);
   const rawQuantity = contractsToRawQuantity(input.pot, market.grid);
   if (rawQuantity === 0n)
     throw new DuelError("That pot is below the market's minimum size.", "TOO_SMALL");
 
   const nonce = Math.floor(Math.random() * 0x10000);
   const ex = signerExchangeFor(input.privateKey);
+  const wanted = probabilityToRawPrice(input.upProbability, market.grid);
 
-  try {
-    const res = await ex.trader.placeOrder({
-      pool: market.pool,
-      side: buySideFor(input.side),
-      price: rawPrice,
-      quantity: rawQuantity,
-      orderType: ORDER_TYPE.POST_ONLY,
-      userData: encodeTag(input.side, nonce),
-      gas: input.gas ?? GAS.order,
-    });
+  // The book moves between the screen reading it and the player signing, so
+  // price against a band read HERE, and if it still moves under us, read again
+  // and go once more. Two attempts covers the race without looping forever.
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const band = await restBand(market);
+    const rawPrice = snapToLead(input.side, wanted, band, market.grid);
 
-    if (res.receipt?.status === "reverted")
-      throw new DuelError("The transaction reverted on-chain.", "FAILED");
-    if (res.orderId === undefined)
-      throw new DuelError("The order did not rest on the book.", "FAILED");
+    try {
+      const res = await ex.trader.placeOrder({
+        pool: market.pool,
+        side: buySideFor(input.side),
+        price: rawPrice,
+        quantity: rawQuantity,
+        orderType: ORDER_TYPE.POST_ONLY,
+        userData: encodeTag(input.side, nonce),
+        gas: input.gas ?? GAS.order,
+      });
 
-    return {
-      orderId: res.orderId,
-      hash: res.hash,
-      nonce,
-      market,
-      rawPrice,
-      rawQuantity,
-      stake: escrowFor(input.side, rawPrice, rawQuantity, market.grid),
-    };
-  } catch (err) {
-    if (err instanceof DuelError) throw err;
-    throw classify(err);
+      if (res.receipt?.status === "reverted")
+        throw new DuelError("The transaction reverted on-chain.", "FAILED");
+      if (res.orderId === undefined)
+        throw new DuelError("The order did not rest on the book.", "FAILED");
+
+      return {
+        orderId: res.orderId,
+        hash: res.hash,
+        nonce,
+        market,
+        rawPrice,
+        rawQuantity,
+        stake: escrowFor(input.side, rawPrice, rawQuantity, market.grid),
+      };
+    } catch (err) {
+      if (err instanceof DuelError) throw err;
+      const classified = classify(err);
+      // Only a cross is worth retrying — anything else will fail the same way.
+      if (classified.code !== "WOULD_CROSS") throw classified;
+      lastError = classified;
+    }
   }
+  throw lastError instanceof DuelError
+    ? lastError
+    : new DuelError("The book kept moving. Try again in a moment.", "WOULD_CROSS");
 }
 
 export interface AcceptDuelResult {
@@ -475,13 +518,29 @@ export async function acceptDuel(input: {
   const takerSide = opposite(duel.creatorSide);
   const ex = signerExchangeFor(input.privateKey);
 
+  // Cross with room to spare, and take what is there rather than all-or-nothing.
+  //
+  // Fill-or-kill looks tidy but it fails the whole accept if the book shifts by
+  // a single tick between reading the duel and signing. And a buffer costs the
+  // taker nothing: the pool charges a taker the MAKER's price, not the price it
+  // offered, so quoting past the touch only makes the cross certain.
+  //
+  // Aggressive means opposite things per side. Buying Up rests as a bid, so it
+  // must reach UP to the asks; buying Down rests as an ask, so it must reach
+  // DOWN to the bids.
+  const ONE = 10n ** BigInt(market.grid.decimals);
+  const buffer = market.grid.tickSize * 25n;
+  const raw =
+    takerSide === "UP" ? duel.rawPrice + buffer : duel.rawPrice - buffer;
+  const price = raw < market.grid.tickSize ? market.grid.tickSize : raw > ONE - market.grid.tickSize ? ONE - market.grid.tickSize : raw;
+
   try {
     const res: PlaceOrderResult = await ex.trader.placeOrder({
       pool: market.pool,
       side: buySideFor(takerSide),
-      price: duel.rawPrice,
+      price,
       quantity: duel.rawRemaining,
-      orderType: ORDER_TYPE.FILL_OR_KILL,
+      orderType: ORDER_TYPE.MARKET,
       userData: encodeTag(takerSide, duel.nonce),
       gas: GAS.order,
     });
