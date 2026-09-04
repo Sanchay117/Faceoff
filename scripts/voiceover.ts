@@ -139,6 +139,7 @@ function main() {
 
   const parts: string[] = [];
   const cues: string[] = [];
+  const timeline: { index: number; startSec: number; spokenSec: number; pause: number; text: string }[] = [];
   let clockAt = 0;
 
   SEGMENTS.forEach((seg, i) => {
@@ -165,6 +166,7 @@ function main() {
     ]);
     parts.push(gap);
 
+    timeline.push({ index: i, startSec: clockAt, spokenSec: spoken, pause: seg.pause, text: seg.text });
     clockAt += spoken + seg.pause;
   });
 
@@ -213,6 +215,10 @@ function main() {
       `The app defaults to a good window; \`npm run windows\` shows them all.`,
     ].join("\n"),
   );
+
+  // A machine-readable copy of the timing, so a different voice can be dubbed
+  // onto footage that was performed against THIS one without drifting.
+  writeFileSync(path.join(OUT_DIR, "timeline.json"), JSON.stringify(timeline, null, 2));
 
   rmSync(WORK, { recursive: true, force: true });
 

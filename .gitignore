@@ -21,6 +21,9 @@ yarn-error.log*
 
 # generated demo audio (the builder lives in scripts/voiceover.ts)
 voiceover/*.m4a
+voiceover/*.mov
+voiceover/*.mp4
+voiceover/*.mp3
 voiceover/*.aiff
 voiceover/*.wav
 voiceover/.work/

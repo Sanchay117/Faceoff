@@ -1,0 +1,121 @@
+[
+  {
+    "index": 0,
+    "startSec": 0,
+    "spokenSec": 8.165079,
+    "pause": 1,
+    "text": "Every prediction market has the same problem. Not the maths — the loneliness. Your bet only happens if somebody is already there to take it."
+  },
+  {
+    "index": 1,
+    "startSec": 9.165079,
+    "spokenSec": 8.298776,
+    "pause": 2,
+    "text": "These are live event contracts on Somnia. Real markets, real oracles, real settlement. And almost every order book is empty."
+  },
+  {
+    "index": 2,
+    "startSec": 19.463855000000002,
+    "spokenSec": 11.76322,
+    "pause": 1.5,
+    "text": "But DreamDEX has something almost nobody uses. Two buyers on opposite sides need no seller at all. The pool takes both stakes, mints a fresh Up-Down pair, and hands each player their side."
+  },
+  {
+    "index": 3,
+    "startSec": 32.727075,
+    "spokenSec": 5.085351,
+    "pause": 1.5,
+    "text": "So the fix for an empty book isn't more liquidity. It's one person who thinks you're wrong."
+  },
+  {
+    "index": 4,
+    "startSec": 39.312426,
+    "spokenSec": 3.134694,
+    "pause": 3.5,
+    "text": "This is Faceoff. Pick a window — Bitcoin."
+  },
+  {
+    "index": 5,
+    "startSec": 45.94712,
+    "spokenSec": 4.504671,
+    "pause": 4,
+    "text": "Pick a side. Then say how sure you are. That's the only number you touch."
+  },
+  {
+    "index": 6,
+    "startSec": 54.451791,
+    "spokenSec": 12.004943,
+    "pause": 1.5,
+    "text": "The surer you are, the more of the pot you put up — and the less they have to. Winner takes the lot. That slider is the order price: the user never sees a probability, and the book gets a precise limit order."
+  },
+  {
+    "index": 7,
+    "startSec": 67.956734,
+    "spokenSec": 6.49229,
+    "pause": 5,
+    "text": "One signature. No extension, no seed phrase — the wallet was created in the browser when I landed."
+  },
+  {
+    "index": 8,
+    "startSec": 79.449024,
+    "spokenSec": 2.116236,
+    "pause": 5.5,
+    "text": "And that's the product. It's a link."
+  },
+  {
+    "index": 9,
+    "startSec": 87.06526,
+    "spokenSec": 4.367937,
+    "pause": 2.5,
+    "text": "My friend opens it and sees the challenge, and what it costs them to take it."
+  },
+  {
+    "index": 10,
+    "startSec": 93.93319699999999,
+    "spokenSec": 1.602494,
+    "pause": 6.5,
+    "text": "So they take the other side."
+  },
+  {
+    "index": 11,
+    "startSec": 102.03569099999999,
+    "spokenSec": 10.47542,
+    "pause": 1.5,
+    "text": "And there it is. The protocol itself is telling us how that trade settled. Mint a pair. No seller. No market maker. That contract did not exist four seconds ago."
+  },
+  {
+    "index": 12,
+    "startSec": 114.01111099999999,
+    "spokenSec": 8.81483,
+    "pause": 2.5,
+    "text": "Now it's a live scoreboard anyone with the link can watch — Bitcoin's price against the exact line this window settles on, from Somnia's on-chain oracle."
+  },
+  {
+    "index": 13,
+    "startSec": 125.32594099999999,
+    "spokenSec": 13.539456,
+    "pause": 2.5,
+    "text": "When the window closes, nobody has to do anything. Somnia's reactivity delivers the oracle's answer straight to the settlement contract. No keeper, no cron job. Every settled duel is claimed in a single transaction."
+  },
+  {
+    "index": 14,
+    "startSec": 141.36539699999997,
+    "spokenSec": 12.309252,
+    "pause": 1.5,
+    "text": "Most tools built on prediction markets tell you whether a market is worth trading. Very few make a trade happen. Faceoff does — every invite is a new user, and every accepted invite is on-chain volume."
+  },
+  {
+    "index": 15,
+    "startSec": 155.174649,
+    "spokenSec": 8.35678,
+    "pause": 1.5,
+    "text": "There's no database either. Every duel is a resting order that identifies itself on-chain. If our site disappears, the duels don't."
+  },
+  {
+    "index": 16,
+    "startSec": 165.031429,
+    "spokenSec": 2.517279,
+    "pause": 1.5,
+    "text": "Faceoff. Bet a friend in one link."
+  }
+]
