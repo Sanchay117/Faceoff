@@ -224,21 +224,28 @@ export function canRest(side: Side, rawUpPrice: bigint, band: RestBand): boolean
  */
 export function snapToLead(side: Side, requested: bigint, band: RestBand, grid: Grid): bigint {
   const tick = grid.tickSize;
+
+  // Lead by exactly ONE TICK, never more.
+  //
+  // Leading the queue is what makes your friend match you rather than somebody
+  // else. But the further you lead, the more edge you hand a market maker for
+  // taking you out first — and a duel parked just under the best ask is the most
+  // attractive bid on the book, which is precisely how a bot ends up as your
+  // opponent before you have even sent the link.
+  //
+  // One tick past the best price on your own side is the minimum that still
+  // leads, and the least worth sniping.
   if (side === "UP") {
-    let p = requested > band.maxUpForUp ? band.maxUpForUp : requested;
-    // Beat the best bid if there is room to.
-    if (band.bestYesBid !== null && p <= band.bestYesBid) {
-      const lead = band.bestYesBid + tick;
-      if (lead <= band.maxUpForUp) p = lead;
-    }
-    return p;
+    const ceiling = band.maxUpForUp;
+    const minimalLead = band.bestYesBid === null ? requested : band.bestYesBid + tick;
+    const p = minimalLead < requested ? minimalLead : requested;
+    return p > ceiling ? ceiling : p;
   }
-  let p = requested < band.minUpForDown ? band.minUpForDown : requested;
-  if (band.bestYesAsk !== null && p >= band.bestYesAsk) {
-    const lead = band.bestYesAsk - tick;
-    if (lead >= band.minUpForDown) p = lead;
-  }
-  return p;
+
+  const floor = band.minUpForDown;
+  const minimalLead = band.bestYesAsk === null ? requested : band.bestYesAsk - tick;
+  const p = minimalLead > requested ? minimalLead : requested;
+  return p < floor ? floor : p;
 }
 
 /**
