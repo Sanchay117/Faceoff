@@ -27,9 +27,11 @@ try {
 }
 
 const POT = 10;
-/** Windows that settle inside a demo. */
-const CADENCES = [900, 3600];
-const MIN_RUNWAY_SEC = 300;
+/**
+ * The venue's short cadences come and go, so this takes whatever is live with
+ * enough runway rather than naming durations that may not exist today.
+ */
+const MIN_RUNWAY_SEC = 600;
 
 async function main() {
   const key = process.env.PACEMAKER_PRIVATE_KEY as `0x${string}` | undefined;
@@ -37,7 +39,7 @@ async function main() {
   const me = privateKeyToAccount(key).address;
 
   const rows = (await listLiveMarkets()).filter(
-    (m) => CADENCES.includes(m.intervalSec) && m.expiry - Date.now() / 1000 > MIN_RUNWAY_SEC,
+    (m) => m.expiry - Date.now() / 1000 > MIN_RUNWAY_SEC,
   );
 
   let placed = 0;

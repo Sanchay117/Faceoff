@@ -36,7 +36,7 @@ async function main() {
       fmt(dn),
     );
   }
-  console.log("\nPick a market where your side shows a range that includes 60%.");
+  console.log("\nPick a market showing a range, not 'crowded' — that is where your duel can lead its queue.");
   process.exit(0);
 }
 
