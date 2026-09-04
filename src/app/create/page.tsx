@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LoadingBlock } from "@/components/AppShell";
 import { useWallet, cleanError } from "@/components/WalletProvider";
 import { Banner, Button, Countdown, fmtNum } from "@/components/ui";
-import { COLLATERAL_DECIMALS } from "@/lib/account";
+import { COLLATERAL_DECIMALS, ensureGas } from "@/lib/account";
 import { confidenceRange, createDuel, restBand, type ConfidenceRange } from "@/lib/duels";
 import { listLiveMarkets, loadMarket, marketLabel, type LiveMarket } from "@/lib/markets";
 import type { Side } from "@/lib/tag";
@@ -115,6 +115,7 @@ export default function CreatePage() {
     setSubmitting(true);
     setError(null);
     try {
+      await ensureGas(burner.address);
       const res = await createDuel({
         privateKey: burner.privateKey,
         marketId: market.marketId,

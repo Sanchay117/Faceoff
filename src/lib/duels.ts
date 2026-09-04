@@ -295,7 +295,16 @@ function classify(err: unknown): DuelError {
       "Someone is already offering the other side at these odds. Take their duel instead, or move your odds.",
       "WOULD_CROSS",
     );
-  if (s.includes("ERC20InsufficientBalance") || s.includes("InsufficientBalance"))
+  if (s.includes("ERC20InsufficientBalance"))
+    return new DuelError("Not enough tUSDC in your wallet for this stake.", "INSUFFICIENT");
+  // The node rejects a write it cannot cover the gas reserve for, and reports it
+  // as a parameter problem rather than a balance one.
+  if (s.includes("Missing or invalid parameters") || s.includes("insufficient balance"))
+    return new DuelError(
+      "Your wallet is out of gas. Open the wallet menu and top it up, then try again.",
+      "INSUFFICIENT",
+    );
+  if (s.includes("InsufficientBalance"))
     return new DuelError("Not enough tUSDC in your wallet for this stake.", "INSUFFICIENT");
   if (s.includes("OrderAlreadyExpired") || s.includes("MarketNotTrading") || s.includes("NotTrading"))
     return new DuelError("This window just closed. Pick the next one.", "MARKET_CLOSED");

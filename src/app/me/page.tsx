@@ -8,7 +8,7 @@ import { LoadingBlock } from "@/components/AppShell";
 import { LiveBadge } from "@/components/LiveBadge";
 import { cleanError, useWallet } from "@/components/WalletProvider";
 import { Banner, Button, Countdown, Empty, SidePill, Stat, TxLink, fmt } from "@/components/ui";
-import { COLLATERAL_DECIMALS } from "@/lib/account";
+import { COLLATERAL_DECIMALS, ensureGas } from "@/lib/account";
 import { useOnChainAdvance } from "@/lib/live";
 import { marketLabel } from "@/lib/markets";
 import {
@@ -67,6 +67,7 @@ export default function MePage() {
     setClaiming(true);
     setClaimError(null);
     try {
+      await ensureGas(burner.address);
       const res = await claimAll(burner.privateKey, positions);
       if (res) setClaimed(res);
       reread();

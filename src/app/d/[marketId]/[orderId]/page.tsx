@@ -18,6 +18,7 @@ import {
   type AcceptDuelResult,
   type Duel,
 } from "@/lib/duels";
+import { ensureGas } from "@/lib/account";
 import { oracleQuestion } from "@/lib/exchange";
 import { useOnChainAdvance } from "@/lib/live";
 import { loadMarket, marketLabel, STATUS, type DuelMarket } from "@/lib/markets";
@@ -70,6 +71,10 @@ export default function DuelPage() {
     setActing(true);
     setError(null);
     try {
+      // A burner funded once at onboarding drifts below the node's gas reserve
+      // as it trades, and the next write fails with a message that blames the
+      // parameters. Top up first.
+      await ensureGas(burner.address);
       const result = await acceptDuel({ privateKey: burner.privateKey, marketId, orderId });
       setMatched(result);
       void refresh();
@@ -86,6 +91,7 @@ export default function DuelPage() {
     setActing(true);
     setError(null);
     try {
+      await ensureGas(burner.address);
       await cancelDuel({ privateKey: burner.privateKey, pool: duel.pool, orderId: duel.orderId });
       void refresh();
       router.push("/");

@@ -1,5 +1,5 @@
 import { SOMNIA_TESTNET_ADDRESSES } from "@somnia-chain/markets-sdk";
-import { GAS } from "./config";
+import { GAS, ORDER_RESERVE_WEI } from "./config";
 import { readExchange, signerExchangeFor } from "./exchange";
 
 export const COLLATERAL = SOMNIA_TESTNET_ADDRESSES.collateral as `0x${string}`;
@@ -59,4 +59,33 @@ export async function requestGas(address: `0x${string}`): Promise<{ ok: boolean;
   } catch (err) {
     return { ok: false, error: String(err) };
   }
+}
+
+/**
+ * Make sure this wallet can still pay for a write, and top it up if not.
+ *
+ * The node refuses a transaction unless the wallet holds `gasLimit *
+ * maxFeePerGas` up front, regardless of what the transaction actually costs. A
+ * burner funded once at onboarding slowly drops under that line as it trades,
+ * and the next order then fails with a bare "Missing or invalid parameters" —
+ * on a wallet still visibly holding thousands of tUSDC, which is about as
+ * misleading as an error gets.
+ *
+ * So every write checks first. Returns true when there is enough headroom to
+ * proceed.
+ */
+export async function ensureGas(address: `0x${string}`): Promise<boolean> {
+  const needed = ORDER_RESERVE_WEI + ORDER_RESERVE_WEI / 2n; // reserve + margin
+  let { gas } = await getBalances(address);
+  if (gas >= needed) return true;
+
+  const res = await requestGas(address);
+  if (!res.ok && !res.hash) return false;
+
+  // The drip route returns on send, not on confirmation.
+  for (let i = 0; i < 15 && gas < needed; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    gas = (await getBalances(address)).gas;
+  }
+  return gas >= needed;
 }
