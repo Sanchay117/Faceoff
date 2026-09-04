@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
-import { useWatchMarket } from "@somnia-chain/markets-sdk/react";
+import { useCallback, useMemo, useState } from "react";
+import { useLiveFills, useWatchMarket } from "@somnia-chain/markets-sdk/react";
 import { LoadingBlock } from "@/components/AppShell";
 import { LiveBadge } from "@/components/LiveBadge";
 import { LiveStanding } from "@/components/LiveStanding";
@@ -23,7 +23,7 @@ import { ensureGas } from "@/lib/account";
 import { oracleQuestion } from "@/lib/exchange";
 import { useOnChainAdvance } from "@/lib/live";
 import { loadMarket, marketLabel, STATUS, type DuelMarket } from "@/lib/markets";
-import { findMatch, type Match } from "@/lib/match";
+import { findMatch, matchFromLiveFills, type Match } from "@/lib/match";
 import { opposite } from "@/lib/tag";
 import { displayName } from "@/lib/wallet";
 
@@ -70,6 +70,18 @@ export default function DuelPage() {
   // Hold a watch on this specific pool so the tail is definitely covering it.
   useWatchMarket(data?.market.pool);
 
+  // The live tape sees the fill the moment its block lands, where the indexer
+  // needs a few seconds. Whichever answers first wins.
+  const liveFills = useLiveFills(data?.market.pool);
+  const liveMatch = useMemo(
+    () =>
+      data
+        ? matchFromLiveFills(liveFills as never, data.market.marketId, orderId)
+        : null,
+    [liveFills, data, orderId],
+  );
+  const match = data?.match ?? liveMatch;
+
   async function take() {
     if (!burner) return;
     setActing(true);
@@ -109,8 +121,8 @@ export default function DuelPage() {
 
   // Once the fill is on the tape, the scoreboard is the truth for everyone —
   // both players and any spectator holding the link.
-  if (data?.match) {
-    return <Scoreboard market={data.market} match={data.match} viewer={burner?.address} />;
+  if (data && match) {
+    return <Scoreboard market={data.market} match={match} viewer={burner?.address} />;
   }
 
   // Until then, the taker gets the celebration straight off their own receipt.
@@ -120,16 +132,22 @@ export default function DuelPage() {
   const { market, duel } = data;
 
   if (!duel) {
+    // The order is gone but no fill has surfaced yet. It was almost certainly
+    // just taken — saying "withdrawn" here would be a guess, and a wrong one at
+    // the exact moment the match lands. Wait for the tape instead.
     return (
       <div className="mx-auto max-w-md py-14 text-center">
-        <div className="text-5xl">🏁</div>
-        <h1 className="mt-4 text-2xl font-black">This duel is closed</h1>
+        <h1 className="text-2xl font-black">Settling the match…</h1>
         <p className="mt-2 text-sm text-muted">
-          The challenger withdrew it before anyone took the other side. There are usually others
-          open.
+          This challenge has left the book. Reading the tape to see who took it.
         </p>
+        <div className="mt-6 flex justify-center">
+          <LoadingBlock label="Confirming" />
+        </div>
         <Link href="/">
-          <Button className="mt-6">Back to the Arena</Button>
+          <Button variant="ghost" className="mt-2">
+            Back to the Arena
+          </Button>
         </Link>
       </div>
     );

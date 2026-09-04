@@ -91,3 +91,59 @@ export async function findMatch(
     return null;
   }
 }
+
+/**
+ * The same match, read off the live tape instead of the indexer.
+ *
+ * `findMatch` queries the indexer, which trails the chain by seconds — so right
+ * after an accept it returns nothing, and a page that treats "no match" as
+ * "withdrawn" tells the player something false at exactly the wrong moment.
+ *
+ * The SDK's live store materializes fills straight from chain logs, so the fill
+ * is here the moment its block lands. Fills are keyed `${pool}_${orderId}`.
+ */
+export function matchFromLiveFills(
+  fills: readonly {
+    market_id: string;
+    makerOrder_id: string;
+    maker: string | undefined;
+    taker: string | undefined;
+    makerSide: string | undefined;
+    takerSide: string | undefined;
+    kind: string | undefined;
+    quantity: string;
+    fillPrice: string;
+    txHash: string;
+    timestamp: string;
+  }[],
+  marketId: string,
+  orderId: bigint,
+): Match | null {
+  const suffix = `_${orderId.toString()}`;
+  const mine = fills.filter(
+    (f) =>
+      f.makerOrder_id?.endsWith(suffix) &&
+      f.market_id?.toLowerCase() === marketId.toLowerCase(),
+  );
+  if (mine.length === 0) return null;
+
+  const quantity = mine.reduce((n, f) => n + BigInt(f.quantity ?? 0), 0n);
+  const notional = mine.reduce(
+    (n, f) => n + BigInt(f.quantity ?? 0) * BigInt(f.fillPrice ?? 0),
+    0n,
+  );
+  const first = mine[0];
+  const makerSide = sideOf(first.makerSide, "UP");
+
+  return {
+    creator: (first.maker ?? "0x") as `0x${string}`,
+    creatorSide: makerSide,
+    taker: (first.taker ?? "0x") as `0x${string}`,
+    takerSide: sideOf(first.takerSide, makerSide === "UP" ? "DOWN" : "UP"),
+    quantity,
+    price: quantity > 0n ? notional / quantity : 0n,
+    kind: first.kind ?? null,
+    txHash: first.txHash,
+    timestamp: Number(first.timestamp ?? 0),
+  };
+}
