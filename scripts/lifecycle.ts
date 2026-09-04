@@ -14,10 +14,11 @@
 import { createPublicClient, createWalletClient, formatEther, http, parseEther } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
-import { COLLATERAL } from "../src/lib/account";
+import { COLLATERAL, claimCollateral } from "../src/lib/account";
 import { NETWORK } from "../src/lib/config";
 import {
   acceptDuel,
+  confidenceRange,
   createDuel,
   getDuel,
   listOpenDuels,
@@ -33,10 +34,10 @@ try {
   /* fall back to whatever is already in the environment */
 }
 
-// Comfortably above the largest per-write reserve (order: 2M gas x 12 gwei =
-// 0.024 STT). The node checks `balance >= gasLimit * maxFeePerGas` before it
-// will even accept a transaction, so headroom matters more than actual cost —
-// a duel only SPENDS about 0.003, and whatever is left is swept back at the end.
+// Comfortably above the largest per-write reserve. The node checks
+// `balance >= gasLimit * maxFeePerGas` before it will even accept a
+// transaction, so headroom matters more than actual cost — a duel only SPENDS a
+// few thousandths, and whatever is left is swept back at the end.
 const GAS_PER_PLAYER = parseEther("0.05");
 const FAUCET_AMOUNT = 1_000n * 10n ** 6n; // 1,000 tUSDC (6dp on Shannon)
 
@@ -90,7 +91,10 @@ async function main() {
     ["alice", ALICE_KEY, alice],
     ["bob", BOB_KEY, bob],
   ] as const) {
-    await signerExchangeFor(key).trader.faucet({ amount: FAUCET_AMOUNT });
+    // Through the shared helper so it inherits the sized gas ceiling. Calling
+    // trader.faucet() raw uses the SDK's 10M default, which reserves more STT
+    // than a freshly dripped player wallet holds.
+    await claimCollateral(key, FAUCET_AMOUNT);
     const bal = await client.getErc20Balance(COLLATERAL, account.address);
     console.log(`  ${name}: ${money(bal, 6)} tUSDC`);
   }
@@ -107,24 +111,31 @@ async function main() {
   const candidates = markets.filter((m) => m.expiry - Date.now() / 1000 > 600);
   if (candidates.length === 0) throw new Error("No live markets with runway on the venue.");
 
-  const depths = await Promise.all(
+  // Pick a window where an UP duel can be FIRST IN ITS QUEUE. Resting is not
+  // enough: the book matches price-then-time, so a duel that is merely valid
+  // gets skipped over whenever something better is sitting there, and the taker
+  // ends up matched against a stranger.
+  const scored = await Promise.all(
     candidates.map(async (m) => {
       try {
-        const book = await readExchange().client.getBinaryOrderBook(m.pool, { depth: 5 });
-        return { m, depth: book.yesBids.length + book.yesAsks.length };
+        const full = await loadMarket(m.marketId);
+        const band = await restBand(full);
+        return { m, full, range: confidenceRange("UP", band, full.grid.decimals) };
       } catch {
-        return { m, depth: Number.MAX_SAFE_INTEGER };
+        return { m, full: null, range: { min: 5, max: 95, canLead: false } };
       }
     }),
   );
-  depths.sort((a, b) => a.depth - b.depth);
-  const target = depths[0].m;
   log(
-    "Book depth per window",
-    depths.map((d) => `${d.m.asset} ${d.m.intervalSec / 60}m: ${d.depth}`).join("  |  "),
+    "Can an UP duel lead here?",
+    scored
+      .map((d) => `${d.m.asset} ${d.m.intervalSec / 60}m: ${d.range.canLead ? `${d.range.min}-${d.range.max}%` : "crowded"}`)
+      .join("  |  "),
   );
 
-  const market = await loadMarket(target.marketId);
+  const chosen = scored.find((d) => d.range.canLead && d.full) ?? scored[0];
+  if (!chosen.full) throw new Error("No window could be loaded.");
+  const market = chosen.full;
   log("Chosen window", {
     market: `${market.asset} ${market.intervalSec / 60}m`,
     marketId: market.marketId,
@@ -139,17 +150,17 @@ async function main() {
   const beforeA = await client.getErc20Balance(COLLATERAL, alice.address);
   const beforeB = await client.getErc20Balance(COLLATERAL, bob.address);
 
-  // A duel is post-only, so it has to rest outside the current touch. Read the
-  // band and pick the most confident price that still rests.
   const band = await restBand(market);
   const one = 10 ** market.grid.decimals;
-  log("Resting band (post-only cannot cross)", {
+  log("Book here", {
     bestYesBid: band.bestYesBid === null ? null : Number(band.bestYesBid) / one,
     bestYesAsk: band.bestYesAsk === null ? null : Number(band.bestYesAsk) / one,
-    maxUpPriceForAnUpDuel: Number(band.maxUpForUp) / one,
+    leadRange: `${chosen.range.min}-${chosen.range.max}%`,
+    canLead: chosen.range.canLead,
   });
 
-  const upProbability = Math.min(0.6, Number(band.maxUpForUp) / one);
+  // Mid of the range that keeps the duel at the front of its own queue.
+  const upProbability = (chosen.range.min + chosen.range.max) / 200;
   log(`Alice opens a duel — backs UP at ${upProbability}, pot of 10`);
   const created = await createDuel({
     privateKey: ALICE_KEY,

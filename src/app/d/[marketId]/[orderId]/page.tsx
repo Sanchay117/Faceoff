@@ -14,6 +14,7 @@ import {
   acceptDuel,
   cancelDuel,
   getDuel,
+  isFirstInQueue,
   stakesFor,
   type AcceptDuelResult,
   type Duel,
@@ -31,6 +32,8 @@ interface Snapshot {
   duel: Duel | null;
   /** Present once the duel has been taken — the link becomes a scoreboard. */
   match: Match | null;
+  /** False when a better-priced order would be filled ahead of this duel. */
+  first: boolean;
 }
 
 export default function DuelPage() {
@@ -55,7 +58,8 @@ export default function DuelPage() {
     // A duel that is no longer resting was either taken or withdrawn. The tape
     // tells us which, and names both players if it was taken.
     const match = duel ? null : await findMatch(market, orderId);
-    return { market, duel, match };
+    const first = duel ? await isFirstInQueue(market, duel) : true;
+    return { market, duel, match, first };
   }, [marketId, orderId]);
 
   const { data, error: readError, refresh: reread } = useOnChainAdvance<Snapshot>(read, [
@@ -201,6 +205,14 @@ export default function DuelPage() {
 
       {error && <Banner tone="error">{error}</Banner>}
       {closed && <Banner tone="error">This window stopped taking orders. Nothing was risked.</Banner>}
+
+      {!isMine && !data.first && (
+        <Banner tone="error">
+          Someone has stepped in front of this challenge with a better price, so taking it now would
+          match you against them instead — you&apos;d get better odds, but not this duel. Wait a
+          moment, or ask them to reopen it.
+        </Banner>
+      )}
 
       {isMine ? (
         <ShareBox onCancel={() => void withdraw(duel)} busy={acting} />

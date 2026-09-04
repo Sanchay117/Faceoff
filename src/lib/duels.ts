@@ -214,6 +214,34 @@ export function canRest(side: Side, rawUpPrice: bigint, band: RestBand): boolean
 }
 
 /**
+ * Would taking this duel actually match THIS duel?
+ *
+ * The clamp on the create screen makes a challenge best-priced when it is
+ * opened, but the book moves. If a maker steps in front before the link is
+ * opened, the pool will fill the taker against that order instead — better for
+ * them, but not the duel they were sent. Checking first means we can say so
+ * before they spend gas rather than after.
+ */
+export async function isFirstInQueue(market: DuelMarket, duel: Duel): Promise<boolean> {
+  try {
+    const book = await readExchange().client.getBinaryOrderBook(market.pool, {
+      depth: 5,
+      decimals: market.grid.decimals,
+    });
+    if (duel.creatorSide === "UP") {
+      // Rests as a bid; anything bidding higher is ahead of it.
+      const best = book.yesBids[0]?.price;
+      return best === undefined || best <= duel.rawPrice;
+    }
+    // Rests as an ask; anything asking lower is ahead of it.
+    const best = book.yesAsks[0]?.price;
+    return best === undefined || best >= duel.rawPrice;
+  } catch {
+    return true; // an unreadable book is not evidence of a problem
+  }
+}
+
+/**
  * The odds that make your duel the one your friend actually matches.
  *
  * A book matches price-then-time and no order can be targeted, so if anything
