@@ -63,7 +63,7 @@ const SEGMENTS: Segment[] = [
   },
   {
     cue: "Point the cursor at 'You risk' / 'They risk' / 'Winner takes'.",
-    text: "Sixty percent confident means you put up six of a ten dollar pot; they put up four. Winner takes ten. That slider is the order price — the user never sees a probability, and the book gets a precise limit order.",
+    text: "The surer you are, the more of the pot you put up — and the less they have to. Winner takes the lot. That slider is the order price: the user never sees a probability, and the book gets a precise limit order.",
     pause: 1.5,
   },
   {
@@ -78,7 +78,7 @@ const SEGMENTS: Segment[] = [
   },
   {
     cue: "Second window shows the challenge.",
-    text: "My friend opens it and sees the challenge. They put up four, they win ten.",
+    text: "My friend opens it and sees the challenge, and what it costs them to take it.",
     pause: 2.5,
   },
   {
@@ -88,7 +88,7 @@ const SEGMENTS: Segment[] = [
   },
   {
     cue: "Point the cursor at the MINT-A-PAIR badge.",
-    text: "And there it is. The protocol itself is telling us how that trade settled. Mint a pair. No seller. No market maker. That ten dollar contract did not exist four seconds ago.",
+    text: "And there it is. The protocol itself is telling us how that trade settled. Mint a pair. No seller. No market maker. That contract did not exist four seconds ago.",
     pause: 1.5,
   },
   {
@@ -206,10 +206,11 @@ function main() {
       ``,
       `The create screen bounds the confidence slider to odds that keep your duel`,
       `at the FRONT of its queue — otherwise the book hands your friend a`,
-      `better-priced order and your challenge sits unmatched. Take whichever side`,
-      `lets you sit at 60%, so the numbers match the narration (6.00 vs 4.00).`,
+      `better-priced order and your challenge sits unmatched.`,
       ``,
-      `Run \`npm run windows\` to see which side leads on which market right now.`,
+      `Pick a window with NO red \`busy\` badge. On a busy one the book is already`,
+      `quoting ahead of you and your friend will be matched against someone else.`,
+      `The app defaults to a good window; \`npm run windows\` shows them all.`,
     ].join("\n"),
   );
 

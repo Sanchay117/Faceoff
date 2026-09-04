@@ -6,11 +6,14 @@ import { LoadingBlock } from "@/components/AppShell";
 import { useWallet, cleanError } from "@/components/WalletProvider";
 import { Banner, Button, Countdown, fmtNum } from "@/components/ui";
 import { COLLATERAL_DECIMALS } from "@/lib/account";
-import { confidenceRange, createDuel, restBand } from "@/lib/duels";
+import { confidenceRange, createDuel, restBand, type ConfidenceRange } from "@/lib/duels";
 import { listLiveMarkets, loadMarket, marketLabel, type LiveMarket } from "@/lib/markets";
 import type { Side } from "@/lib/tag";
 
 const POT_PRESETS = [5, 10, 25, 100];
+
+type Range = ConfidenceRange;
+const OPEN: Range = { min: 5, max: 95, canLead: true };
 
 export default function CreatePage() {
   const router = useRouter();
@@ -48,24 +51,50 @@ export default function CreatePage() {
    * what is already resting — past that point the honest answer is "someone is
    * already offering this, go take it" rather than a failed transaction.
    */
-  const [range, setRange] = useState({ min: 5, max: 95, canLead: true });
+  const [ranges, setRanges] = useState<Record<string, { UP: Range; DOWN: Range }>>({});
 
+  // Work out, for every live window, the odds at which a duel would lead its own
+  // queue. A window where neither side can lead is one where the book would hand
+  // your friend somebody else's order, so it is worth surfacing before the
+  // choice rather than after the transaction.
   useEffect(() => {
+    if (!markets || markets.length === 0) return;
     let cancelled = false;
-    if (!marketId) return;
     void (async () => {
-      try {
-        const full = await loadMarket(marketId);
-        const band = await restBand(full);
-        if (!cancelled) setRange(confidenceRange(side, band, full.grid.decimals));
-      } catch {
-        if (!cancelled) setRange({ min: 5, max: 95, canLead: true });
-      }
+      const entries = await Promise.all(
+        markets.map(async (m) => {
+          try {
+            const full = await loadMarket(m.marketId);
+            const band = await restBand(full);
+            return [
+              m.marketId,
+              {
+                UP: confidenceRange("UP", band, full.grid.decimals),
+                DOWN: confidenceRange("DOWN", band, full.grid.decimals),
+              },
+            ] as const;
+          } catch {
+            return [m.marketId, { UP: OPEN, DOWN: OPEN }] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const map = Object.fromEntries(entries);
+      setRanges(map);
+
+      // Prefer a window where the current side can actually lead.
+      setMarketId((current) => {
+        if (current && map[current]?.[side]?.canLead) return current;
+        const better = markets.find((m) => map[m.marketId]?.[side]?.canLead);
+        return better?.marketId ?? current;
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [marketId, side]);
+  }, [markets, side]);
+
+  const range = (marketId && ranges[marketId]?.[side]) ?? OPEN;
 
   // Keep the slider inside the range as the market or side changes.
   useEffect(() => {
@@ -139,7 +168,14 @@ export default function CreatePage() {
                   : "border-line bg-surface hover:border-line-bright"
               }`}
             >
-              <div className="text-xs font-bold">{marketLabel(m.asset, m.intervalSec)}</div>
+              <div className="flex items-center gap-1.5 text-xs font-bold">
+                {marketLabel(m.asset, m.intervalSec)}
+                {ranges[m.marketId] && !ranges[m.marketId][side].canLead && (
+                  <span className="rounded bg-down-dim px-1 py-px text-[0.6rem] font-bold text-down">
+                    busy
+                  </span>
+                )}
+              </div>
               <div className="mt-0.5 text-[0.68rem] tabular text-faint">
                 closes in <Countdown to={m.expiry} />
               </div>
