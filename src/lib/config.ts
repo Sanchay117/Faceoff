@@ -124,7 +124,12 @@ export const GAS = {
    */
   order: 4_000_000n,
   orderDeep: 9_000_000n,
-  cancel: 1_500_000n,
+  /**
+   * Withdrawing costs more than placing: the pool refunds escrow and unlinks the
+   * order from a sorted list. Measured at 3,270,528 on Shannon — more than twice
+   * what a naive guess would allow.
+   */
+  cancel: 5_000_000n,
   faucet: 3_000_000n,
   /** Batched redemption grows with the number of entries. */
   redeem: 4_000_000n,
